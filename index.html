@@ -1,0 +1,231 @@
+
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>VisionPharma | Terminal de Carregamento</title>
+    
+    <link rel="stylesheet" href="global.css">
+    <link rel="stylesheet" href="assets/fontawesome/css/all.min.css">
+
+    <style>
+        :root {
+            --bg: #020202; --text: #ffffff; --dim: #444;
+            --accent: #ffffff; --success: #00ffcc; --error: #ff4444;
+            --logo-filter: invert(1) brightness(1.8);
+            --ecg-bg: rgba(255,255,255,0.03);
+            --glass: rgba(255, 255, 255, 0.02);
+        }
+
+        [data-theme="light"] {
+            --bg: #f5f5f7; --text: #000000; --dim: #999;
+            --accent: #000000; --logo-filter: none;
+            --ecg-bg: rgba(0,0,0,0.05);
+            --glass: rgba(0, 0, 0, 0.02);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; -webkit-font-smoothing: antialiased; }
+
+        body {
+            background-color: var(--bg); color: var(--text);
+            font-family: "Inter", sans-serif;
+            height: 100vh; display: flex; flex-direction: column;
+            justify-content: center; align-items: center; overflow: hidden;
+            transition: background 0.8s ease;
+        }
+
+        /* 1. TEXTURA CINEMATOGRÁFICA (GRÃO) */
+        body::before {
+            content: ""; position: fixed; inset: 0; z-index: 1;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+            opacity: 0.02; pointer-events: none;
+        }
+
+        .ambient {
+            position: fixed; inset: 0;
+            background: radial-gradient(circle at 50% 50%, var(--glass) 0%, transparent 80%);
+            z-index: 0;
+        }
+
+        /* 2. CONTAINER PRINCIPAL */
+        #boot-wrapper {
+            position: relative; z-index: 10;
+            display: flex; flex-direction: column; align-items: center;
+            width: 100%; max-width: 400px;
+            transition: all 1s cubic-bezier(0.7, 0, 0.3, 1);
+        }
+
+        .logo-box {
+            width: 125px; margin-bottom: 50px;
+            filter: var(--logo-filter);
+            animation: logoBreath 5s infinite ease-in-out;
+        }
+        @keyframes logoBreath { 0%, 100% { transform: scale(1); opacity: 0.8; } 50% { transform: scale(1.05); opacity: 1; } }
+
+        /* 3. ECG (O CARREGADOR) */
+        .ecg-container {
+            position: relative; width: 220px; height: 60px; margin-bottom: 35px;
+        }
+        .ecg-svg { width: 100%; height: 100%; overflow: visible; }
+        .ecg-path-bg { fill: none; stroke: var(--ecg-bg); stroke-width: 3; stroke-linecap: round; }
+        .ecg-path-loader {
+            fill: none; stroke: var(--text); stroke-width: 3; stroke-linecap: round;
+            stroke-linejoin: round; stroke-dasharray: 1000; stroke-dashoffset: 1000;
+            transition: stroke-dashoffset 0.8s cubic-bezier(0.4, 0, 0.2, 1), stroke 0.4s;
+            filter: drop-shadow(0 0 10px var(--text));
+        }
+
+        /* 4. ÁREA DE TEXTO TÉCNICO */
+        .status-area { text-align: center; }
+        .percentage {
+            font-family: 'JetBrains Mono', monospace; font-size: 12px;
+            font-weight: 800; letter-spacing: 3px; margin-bottom: 10px;
+            display: block; color: var(--text);
+        }
+        .log-text {
+            font-size: 8px; font-weight: 700; letter-spacing: 4px;
+            text-transform: uppercase; color: var(--dim); transition: 0.3s;
+        }
+
+        /* 5. RODAPÉ (INSTITUCIONAL) */
+        footer {
+            position: absolute; bottom: 40px; width: 100%;
+            text-align: center; z-index: 10;
+            animation: fadeInFooter 2s ease forwards 1s; opacity: 0;
+        }
+        .footer-line {
+            font-family: 'Inter', sans-serif; font-size: 9px;
+            letter-spacing: 2px; color: var(--dim); line-height: 1.8;
+            font-weight: 500;
+        }
+        .footer-line b { color: var(--text); opacity: 0.6; }
+
+        @keyframes fadeInFooter { to { opacity: 1; } }
+
+        /* TELA DE ERRO */
+        #error-screen {
+            display: none; position: fixed; inset: 0; z-index: 100;
+            background: var(--bg); flex-direction: column;
+            justify-content: center; align-items: center; text-align: center;
+        }
+
+        /* SAÍDA */
+        .boot-exit { opacity: 0; transform: scale(0.96); filter: blur(15px); }
+    </style>
+</head>
+<body data-theme="dark">
+
+    <div class="ambient"></div>
+
+    <div id="boot-wrapper">
+        <img src="assets/imagem/svg/logo.svg" class="logo-box" alt="Pharmora">
+
+        <div class="ecg-container">
+            <svg class="ecg-svg" viewBox="0 0 200 60">
+                <path id="path-data" d="M 0,30 L 40,30 L 50,30 L 60,45 L 70,5 L 80,55 L 90,30 L 120,30 L 130,30 L 140,40 L 150,15 L 160,30 L 200,30" />
+                <use href="#path-data" class="ecg-path-bg" />
+                <use href="#path-data" id="ecg-loader" class="ecg-path-loader" />
+            </svg>
+        </div>
+
+        <div class="status-area">
+            <span class="percentage" id="pct">0%</span>
+            <div class="log-text" id="status-msg">Iniciando Protocolos...</div>
+        </div>
+    </div>
+
+    <footer>
+        <div class="footer-line"><b>VISIONPHARMA V1.0.0.0</b> • BUILD BETA</div>
+        <div class="footer-line">© VISIONPHARMA 2026 • TODOS DIREITOS RESERVADOS</div>
+    </footer>
+
+    <div id="error-screen">
+        <i class="fas fa-terminal" style="font-size: 2.5rem; color: var(--error); margin-bottom: 25px;"></i>
+        <h2 style="letter-spacing: 4px; font-size: 12px; color: var(--text);">FALHA NA SINCRONIZAÇÃO DO NODO</h2>
+        <p id="err-desc" style="font-size: 9px; margin-top: 10px; color: var(--dim); letter-spacing: 1px;"></p>
+        <button onclick="window.location.href='login.html'" style="margin-top: 30px; padding: 12px 30px; background: var(--text); color: var(--bg); border: none; border-radius: 4px; font-weight: 800; font-size: 10px; cursor: pointer; letter-spacing: 2px;">RECONFIGURAR</button>
+    </div>
+
+    <script>
+        const loader = document.getElementById('ecg-loader');
+        const pctText = document.getElementById('pct');
+        const msgText = document.getElementById('status-msg');
+        const serverIP = localStorage.getItem('pharmora_ip') || 'localhost';
+
+        const pathLength = document.getElementById('path-data').getTotalLength();
+        loader.style.strokeDasharray = pathLength;
+        loader.style.strokeDashoffset = pathLength;
+
+        async function bootSequence() {
+            try {
+                // Sincronizar Tema Imparcial
+                const theme = localStorage.getItem('pharmora_theme') || 'dark';
+                document.body.setAttribute('data-theme', theme);
+                
+                await updateProgress(15, "chegando o núcleo");
+                await wait(1000);
+
+                await updateProgress(45, "Vincular na rede: " + serverIP);
+                await wait(500);
+                
+                // Verificação Real do Banco
+                const controller = new AbortController();
+                const timeout = setTimeout(() => controller.abort(), 4000);
+
+                try {
+                    const res = await fetch(`http://${serverIP}/pharmora/api_status.php`, { signal: controller.signal });
+                    const data = await res.json();
+                    sessionStorage.setItem('pharmora_config', JSON.stringify(data));
+                } catch (e) {
+                    throw new Error("Servidor Central Offline ou IP Inválido");
+                }
+
+                await updateProgress(65, "Hidratando a base de dados");
+                await wait(900);
+
+                await updateProgress(85, "Sincronização Concluída");
+                
+                await wait(500);
+                
+                await updateProgress(100, "Iniciando..");
+                
+                loader.style.stroke = "var(--success)";
+                loader.style.filter = "drop-shadow(0 0 12px var(--success))";
+                
+                // Delay para apreciação da UI
+                await wait(1800);
+                exit();
+
+            } catch (err) {
+                showError(err.message);
+            }
+        }
+
+        function updateProgress(value, message) {
+            return new Promise(resolve => {
+                pctText.textContent = value + "%";
+                msgText.textContent = message;
+                const offset = pathLength - (pathLength * (value / 100));
+                loader.style.strokeDashoffset = offset;
+                setTimeout(resolve, 600);
+            });
+        }
+
+        function showError(msg) {
+            document.getElementById('error-screen').style.display = 'flex';
+            document.getElementById('err-desc').textContent = msg;
+        }
+
+        function exit() {
+            document.getElementById('boot-wrapper').classList.add('boot-exit');
+            document.querySelector('footer').style.opacity = "0";
+            setTimeout(() => { window.location.href = "login.html"; }, 1000);
+        }
+
+        function wait(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+        window.onload = bootSequence;
+    </script>
+</body>
+</html>
