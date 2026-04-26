@@ -1,0 +1,25 @@
+CREATE TABLE IF NOT EXISTS auditoria_logs (
+    id_log INT AUTO_INCREMENT PRIMARY KEY,
+    
+    -- ID do Funcionário que realizou a ação
+    id_funcionario INT NULL, 
+    
+    -- Tipo de ação (Ex: 'LOGIN_SUCESSO', 'ERRO_LOGIN', 'ALTERAR_PRECO', 'ELIMINAR_DADO')
+    acao VARCHAR(50) NOT NULL, 
+    
+    -- Descrição detalhada (Ex: 'Alterou o preço do item X de 500 para 450')
+    detalhes TEXT NOT NULL, 
+    
+    -- Em qual parte do sistema aconteceu (Ex: 'RH', 'Vendas', 'Inventário')
+    modulo VARCHAR(50) DEFAULT 'Sistema', 
+    
+    -- Endereço IP da máquina que fez a operação
+    ip_origem VARCHAR(45) NOT NULL, 
+    
+    -- Data e Hora exata do evento
+    data_hora TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    -- Relacionamento com a tabela de funcionários (se existir)
+    -- Se o funcionário for removido, o log permanece com valor NULL no ID para histórico
+    FOREIGN KEY (id_funcionario) REFERENCES funcionarios(id_sistema) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8
