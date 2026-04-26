@@ -1,0 +1,85 @@
+-- 1. TABELA DE FUNCIONÁRIOS (Operadores de Caixa)
+-- =======================================================
+CREATE TABLE IF NOT EXISTS funcionarios (
+    id_sistema INT AUTO_INCREMENT PRIMARY KEY,
+    id_funcionario VARCHAR(50) NOT NULL UNIQUE, -- Ex: PH-2026-001
+    nome_completo VARCHAR(150) NOT NULL,
+    documento_id VARCHAR(50),
+    telefone VARCHAR(20),
+    data_nascimento DATE,
+    sexo ENUM('M', 'F', 'Outro'),
+    email VARCHAR(100),
+    morada VARCHAR(255),
+    cargo VARCHAR(50),
+    departamento VARCHAR(50),
+    filial VARCHAR(50),
+    username VARCHAR(50) NOT NULL UNIQUE,
+    password_hash VARCHAR(255) NOT NULL,
+    nivel_acesso VARCHAR(20) DEFAULT 'Funcionario',
+    permissoes_especiais JSON,
+    foto_perfil VARCHAR(255) DEFAULT 'avatar.png',
+    data_registo TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- =======================================================
+-- 2. TABELA DE PRODUTOS (Estoque de Medicamentos)
+-- =======================================================
+CREATE TABLE IF NOT EXISTS produtos (
+    id_produto INT AUTO_INCREMENT PRIMARY KEY,
+    nome_produto VARCHAR(150) NOT NULL,
+    categoria VARCHAR(50),
+    lote_atual VARCHAR(50),
+    data_validade DATE,
+    preco_venda DECIMAL(10,2) NOT NULL,
+    quantidade_estoque INT NOT NULL DEFAULT 0,
+    exige_receita ENUM('Sim', 'Nao') DEFAULT 'Nao',
+    data_cadastro TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- =======================================================
+-- 3. TABELA DE VENDAS (Cabeçalho da Fatura/Recibo)
+-- =======================================================
+CREATE TABLE IF NOT EXISTS vendas (
+    id_venda INT AUTO_INCREMENT PRIMARY KEY,
+    fatura_recibo VARCHAR(50) NOT NULL UNIQUE, -- Ex: FT-2026-0015
+    id_funcionario INT NOT NULL, -- Quem fez a venda
+    id_cliente INT NULL, -- Pode ser NULL se for "Consumidor Final"
+    nome_cliente VARCHAR(150) DEFAULT 'Consumidor Final',
+    nif_cliente VARCHAR(50) DEFAULT '999999999',
+    
+    -- Dados da Receita Médica (Específico para Farmácias)
+    exige_receita VARCHAR(3) DEFAULT 'Nao',
+    tipo_receita VARCHAR(50) NULL,
+    numero_receita VARCHAR(50) NULL,
+    nome_medico VARCHAR(100) NULL,
+    num_ordem_medico VARCHAR(50) NULL,
+    
+    -- Valores e Pagamento
+    metodo_pagamento VARCHAR(50) DEFAULT 'Numerário',
+    subtotal DECIMAL(10,2) NOT NULL,
+    desconto_geral DECIMAL(10,2) DEFAULT 0.00,
+    total_pagar DECIMAL(10,2) NOT NULL,
+    valor_recebido DECIMAL(10,2) NOT NULL,
+    troco DECIMAL(10,2) NOT NULL,
+    data_venda TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
+    -- Relacionamento com a tabela de funcionários
+    FOREIGN KEY (id_funcionario) REFERENCES funcionarios(id_sistema)
+);
+
+-- =======================================================
+-- 4. TABELA DE ITENS DA VENDA (O Carrinho de Compras)
+-- =======================================================
+CREATE TABLE IF NOT EXISTS itens_venda (
+    id_item INT AUTO_INCREMENT PRIMARY KEY,
+    id_venda INT NOT NULL, -- Vincula este item à fatura correspondente
+    id_produto INT NOT NULL, -- Qual medicamento foi vendido
+    lote VARCHAR(50) DEFAULT 'N/D', -- Vital para farmácias
+    quantidade INT NOT NULL,
+    preco_unitario DECIMAL(10,2) NOT NULL,
+    subtotal_item DECIMAL(10,2) NOT NULL,
+    
+    -- Relacionamentos
+    FOREIGN KEY (id_venda) REFERENCES vendas(id_venda) ON DELETE CASCADE,
+    FOREIGN KEY (id_produto) REFERENCES produtos(id_produto)
+);
