@@ -1,0 +1,154 @@
+<?php
+/**
+ * PHARMORA API - Processamento de Venda (Terminal POS)
+ * Otimizado com CORS, Transações SQL e Tratamento de Receitas Médicas
+ */
+
+// 1. CONFIGURAÇÕES CORS
+header("Access-Control-Allow-Origin: *");
+header("Access-Control-Allow-Methods: POST, GET, OPTIONS");
+header("Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With");
+header("Content-Type: application/json; charset=UTF-8");
+
+if ($_SERVER['REQUEST_METHOD'] == 'OPTIONS') {
+    http_response_code(200);
+    exit;
+}
+
+ini_set('display_errors', 0);
+error_reporting(E_ALL);
+
+require_once("../config_api.php");
+
+if (!$conn) {
+    echo json_encode(["success" => false, "message" => "Erro crítico: Falha na conexão com o servidor."]);
+    exit;
+}
+
+if ($_SERVER["REQUEST_METHOD"] !== "POST") {
+    echo json_encode(["success" => false, "message" => "Método inválido. Use POST."]);
+    exit;
+}
+
+// 2. RECEPÇÃO DOS DADOS (Divididos pelas "Abas" do Terminal de Vendas)
+
+// ABA 1: Identificação do Operador e Cliente
+$id_funcionario = isset($_POST['id_funcionario']) ? trim($_POST['id_funcionario']) : null;
+$id_cliente     = trim($_POST['id_cliente'] ?? null); // Pode ser null se for Consumidor Final
+$nome_cliente   = trim($_POST['nome_cliente'] ?? 'Consumidor Final');
+$nif_cliente    = trim($_POST['nif_cliente'] ?? '999999999');
+
+// ABA 2: Dados da Receita Médica (Crucial para Farmácias)
+$exige_receita  = trim($_POST['exige_receita'] ?? 'Nao'); // Sim / Nao
+$tipo_receita   = trim($_POST['tipo_receita'] ?? ''); // Ex: Normal, Controlada (Azul), Psicotrópicos
+$numero_receita = trim($_POST['numero_receita'] ?? '');
+$nome_medico    = trim($_POST['nome_medico'] ?? '');
+$num_ordem_med  = trim($_POST['num_ordem_medico'] ?? '');
+
+// ABA 3: Resumo Financeiro e Pagamento
+$metodo_pag     = trim($_POST['metodo_pagamento'] ?? 'Numerário'); // Numerário, Multicaixa, Transferência, Misto
+$subtotal       = floatval($_POST['subtotal'] ?? 0);
+$desconto_geral = floatval($_POST['desconto_geral'] ?? 0);
+$total_pagar    = floatval($_POST['total_pagar'] ?? 0);
+$valor_recebido = floatval($_POST['valor_recebido'] ?? 0);
+$troco          = floatval($_POST['troco'] ?? 0);
+
+// ABA 4: Carrinho de Compras (Recebido como String JSON do Frontend)
+$carrinho_json  = $_POST['carrinho'] ?? '[]';
+$carrinho       = json_decode($carrinho_json, true);
+
+// Validação Básica
+if (empty($id_funcionario) || empty($carrinho)) {
+    echo json_encode(["success" => false, "message" => "Erro: Operador não identificado ou carrinho vazio."]);
+    exit;
+}
+
+if ($total_pagar < 0 || $valor_recebido < $total_pagar) {
+    echo json_encode(["success" => false, "message" => "Erro: O valor recebido é insuficiente para o total da venda."]);
+    exit;
+}
+
+// 3. LÓGICA DE BASE DE DADOS (TRANSAÇÃO SEGURA)
+// Iniciamos uma transação porque vamos mexer em 3 tabelas: vendas, itens_venda e produtos (estoque)
+$conn->begin_transaction();
+
+try {
+    // ================= PASSO A: INSERIR O CABEÇALHO DA VENDA =================
+    // Gera o ID Visual da Fatura (Ex: FT-2026-0015)
+    $res_id = $conn->query("SELECT id_venda FROM vendas ORDER BY id_venda DESC LIMIT 1");
+    $prox_id = ($res_id && $res_id->num_rows > 0) ? $res_id->fetch_assoc()['id_venda'] + 1 : 1;
+    $fatura_recibo = "FT-" . date("Y") . "-" . str_pad($prox_id, 4, "0", STR_PAD_LEFT);
+
+    $sql_venda = "INSERT INTO vendas 
+    (fatura_recibo, id_funcionario, id_cliente, nome_cliente, nif_cliente, exige_receita, tipo_receita, numero_receita, nome_medico, num_ordem_medico, metodo_pagamento, subtotal, desconto_geral, total_pagar, valor_recebido, troco)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+
+    $stmt_venda = $conn->prepare($sql_venda);
+    if (!$stmt_venda) throw new Exception("Erro ao preparar venda: " . $conn->error);
+
+    $stmt_venda->bind_param(
+        "siissssssssddddd", 
+        $fatura_recibo, $id_funcionario, $id_cliente, $nome_cliente, $nif_cliente, 
+        $exige_receita, $tipo_receita, $numero_receita, $nome_medico, $num_ordem_med, 
+        $metodo_pag, $subtotal, $desconto_geral, $total_pagar, $valor_recebido, $troco
+    );
+    
+    if (!$stmt_venda->execute()) throw new Exception("Erro ao registar venda principal.");
+    
+    $id_venda_inserida = $stmt_venda->insert_id; // Pega o ID (Chave Primária) que acabou de ser gerado
+    $stmt_venda->close();
+
+    // ================= PASSO B: INSERIR ITENS E DESCONTAR ESTOQUE =================
+    
+    // Preparar as queries uma única vez para usar dentro do loop (Mais rápido e otimizado)
+    $sql_item = "INSERT INTO itens_venda (id_venda, id_produto, lote, quantidade, preco_unitario, subtotal_item) VALUES (?, ?, ?, ?, ?, ?)";
+    $stmt_item = $conn->prepare($sql_item);
+    if (!$stmt_item) throw new Exception("Erro ao preparar itens da venda.");
+
+    $sql_estoque = "UPDATE produtos SET quantidade_estoque = quantidade_estoque - ? WHERE id_produto = ? AND quantidade_estoque >= ?";
+    $stmt_estoque = $conn->prepare($sql_estoque);
+    if (!$stmt_estoque) throw new Exception("Erro ao preparar atualização de estoque.");
+
+    foreach ($carrinho as $item) {
+        $id_produto = $item['id_produto'];
+        $lote       = $item['lote'] ?? 'N/D'; // Lote é muito importante em farmácias
+        $qtd        = intval($item['quantidade']);
+        $preco      = floatval($item['preco_unitario']);
+        $subt_item  = floatval($item['subtotal_item']);
+
+        // 1. Grava o item na tabela 'itens_venda'
+        $stmt_item->bind_param("iisidd", $id_venda_inserida, $id_produto, $lote, $qtd, $preco, $subt_item);
+        if (!$stmt_item->execute()) throw new Exception("Erro ao gravar o medicamento ID: $id_produto.");
+
+        // 2. Desconta do estoque (O 'AND quantidade_estoque >= ?' impede que o estoque fique negativo)
+        $stmt_estoque->bind_param("iii", $qtd, $id_produto, $qtd);
+        $stmt_estoque->execute();
+        
+        // Verifica se o estoque foi realmente descontado (Se afetou 0 linhas, é porque não tinha estoque suficiente)
+        if ($stmt_estoque->affected_rows === 0) {
+            throw new Exception("Estoque insuficiente para o medicamento ID: $id_produto.");
+        }
+    }
+
+    $stmt_item->close();
+    $stmt_estoque->close();
+
+    // ================= EXECUÇÃO FINAL (COMMIT) =================
+    // Se o código chegou até aqui sem cair no 'catch', confirmamos tudo na base de dados!
+    $conn->commit();
+
+    echo json_encode([
+        "success" => true, 
+        "message" => "Venda registada com sucesso!",
+        "fatura"  => $fatura_recibo,
+        "troco"   => $troco
+    ]);
+
+} catch (Exception $e) {
+    // Se qualquer coisa der erro (estoque vazio, falha no banco), ele cancela TUDO (ROLLBACK)
+    $conn->rollback();
+    echo json_encode(["success" => false, "message" => $e->getMessage()]);
+}
+
+$conn->close();
+?>
