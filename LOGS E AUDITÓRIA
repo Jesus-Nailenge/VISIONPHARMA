@@ -1,0 +1,81 @@
+<?php
+/**
+ * PHARMORA API - Sistema de Auditoria e Logs Permanente
+ * Regista ações de utilizadores, erros de sistema e tentativas de acesso.
+ */
+
+// 1. CONFIGURAÇÕES CORS E SEGURANÇA
+header("Access-Control-Allow-Origin: *");
+header("Access-Control-Allow-Methods: POST, OPTIONS");
+header("Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With");
+header("Content-Type: application/json; charset=UTF-8");
+
+if ($_SERVER['REQUEST_METHOD'] == 'OPTIONS') {
+    http_response_code(200);
+    exit;
+}
+
+// Oculta erros para manter o JSON limpo
+ini_set('display_errors', 0);
+error_reporting(E_ALL);
+
+require_once("../config_api.php");
+
+// Verificação de Conexão com a Base de Dados
+if (!$conn) {
+    echo json_encode(["success" => false, "message" => "Erro de conexão ao servidor de logs."]);
+    exit;
+}
+
+// Garante que apenas requisições POST processem o Log
+if ($_SERVER["REQUEST_METHOD"] !== "POST") {
+    echo json_encode(["success" => false, "message" => "Método inválido."]);
+    exit;
+}
+
+// 2. RECEPÇÃO DOS DADOS DE AUDITORIA
+// Estes dados devem ser enviados pelo seu App/Frontend ou via include interno
+$id_funcionario = isset($_POST['id_funcionario']) ? intval($_POST['id_funcionario']) : null;
+$acao           = trim($_POST['acao'] ?? 'ACAO_NAO_DEFINIDA'); // Ex: LOGIN, DELETE_USER, UPDATE_STOCK
+$detalhes       = trim($_POST['detalhes'] ?? '');
+$modulo         = trim($_POST['modulo'] ?? 'Geral'); // Ex: Vendas, Recursos Humanos, Configurações
+
+// Captura automática do IP do terminal
+$ip_origem = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
+
+// Validação básica
+if (empty($detalhes)) {
+    echo json_encode(["success" => false, "message" => "O log precisa de uma descrição/detalhes."]);
+    exit;
+}
+
+// 3. INSERÇÃO NA BASE DE DADOS (PREPARED STATEMENTS)
+try {
+    $sql = "INSERT INTO auditoria_logs (id_funcionario, acao, detalhes, modulo, ip_origem) VALUES (?, ?, ?, ?, ?)";
+    
+    $stmt = $conn->prepare($sql);
+    if (!$stmt) {
+        throw new Exception("Erro ao preparar gravação de auditoria: " . $conn->error);
+    }
+
+    // "issss" -> Inteiro para o ID, String para Ação, Detalhes, Módulo e IP
+    $stmt->bind_param("issss", $id_funcionario, $acao, $detalhes, $modulo, $ip_origem);
+
+    if ($stmt->execute()) {
+        echo json_encode([
+            "success" => true, 
+            "message" => "Evento de auditoria registado.",
+            "log_id"  => $stmt->insert_id
+        ]);
+    } else {
+        throw new Exception("Falha ao executar inserção do log.");
+    }
+
+    $stmt->close();
+
+} catch (Exception $e) {
+    echo json_encode(["success" => false, "message" => $e->getMessage()]);
+}
+
+$conn->close();
+?>
