@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+<meta charset="UTF-8">
+<title>Gestão Financeira</title>
+
+<style>
+body {
+  font-family: Arial;
+  background: #0d1117;
+  color: #fff;
+}
+
+.container {
+  padding: 20px;
+}
+
+h2 {
+  color: #00ffc3;
+}
+
+.section {
+  background: #161b22;
+  padding: 15px;
+  margin-bottom: 20px;
+  border-radius: 10px;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 10px;
+}
+
+th, td {
+  padding: 10px;
+  border: 1px solid #333;
+  text-align: center;
+}
+
+th {
+  background: #21262d;
+}
+
+input {
+  width: 100%;
+  background: transparent;
+  border: none;
+  color: white;
+  text-align: center;
+}
+
+input:focus {
+  outline: none;
+}
+</style>
+
+</head>
+
+<body>
+
+<div class="container">
+
+<h2>Gestão Financeira</h2>
+
+<!-- CAIXA -->
+<div class="section">
+<h3>Caixa</h3>
+
+<table>
+<tr>
+<th>Data</th>
+<th>Saldo Inicial</th>
+<th>Entradas</th>
+<th>Saídas</th>
+<th>Saldo Final</th>
+</tr>
+
+<tr>
+<td><input type="date"></td>
+<td><input type="number"></td>
+<td><input type="number"></td>
+<td><input type="number"></td>
+<td><input type="number"></td>
+</tr>
+</table>
+</div>
+
+<!-- VENDAS -->
+<div class="section">
+<h3>Vendas</h3>
+
+<table>
+<tr>
+<th>Data</th>
+<th>Produto</th>
+<th>Quantidade</th>
+<th>Preço</th>
+<th>Total</th>
+</tr>
+
+<tr>
+<td><input type="date"></td>
+<td><input type="text"></td>
+<td><input type="number"></td>
+<td><input type="number"></td>
+<td><input type="number"></td>
+</tr>
+</table>
+</div>
+
+<!-- CONTAS A PAGAR -->
+<div class="section">
+<h3>Contas a Pagar</h3>
+
+<table>
+<tr>
+<th>Descrição</th>
+<th>Valor</th>
+<th>Data de Vencimento</th>
+<th>Status</th>
+</tr>
+
+<tr>
+<td><input type="text"></td>
+<td><input type="number"></td>
+<td><input type="date"></td>
+<td><input type="text" placeholder="Pago/Pendente"></td>
+</tr>
+</table>
+</div>
+
+<!-- CONTAS A RECEBER -->
+<div class="section">
+<h3>Contas a Receber (Clientes)</h3>
+
+<table>
+<tr>
+<th>Cliente</th>
+<th>Valor</th>
+<th>Data</th>
+<th>Status</th>
+</tr>
+
+<tr>
+<td><input type="text"></td>
+<td><input type="number"></td>
+<td><input type="date"></td>
+<td><input type="text" placeholder="Pago/Pendente"></td>
+</tr>
+</table>
+</div>
+
+<!-- DÍVIDAS DA EMPRESA -->
+<div class="section">
+<h3>Dívidas da Empresa</h3>
+
+<table>
+<tr>
+<th>Credor</th>
+<th>Valor</th>
+<th>Data</th>
+<th>Descrição</th>
+</tr>
+
+<tr>
+<td><input type="text"></td>
+<td><input type="number"></td>
+<td><input type="date"></td>
+<td><input type="text"></td>
+</tr>
+</table>
+</div>
+
+<!-- RELATÓRIOS -->
+<div class="section">
+<h3>Relatórios</h3>
+
+<table>
+<tr>
+<th>Mês</th>
+<th>Vendas Totais</th>
+<th>Despesas</th>
+<th>Lucro</th>
+</tr>
+
+<tr>
+<td><input type="month"></td>
+<td><input type="number"></td>
+<td><input type="number"></td>
+<td><input type="number"></td>
+</tr>
+</table>
+</div>
+
+</div>
+
+</body>
+</html>
