@@ -1,0 +1,63 @@
+<?php
+/**
+ * PHARMORA API - Sistema de Auditoria e Logs Permanente
+ * Registo automático e independente de movimentações.
+ */
+
+// Evita que o ficheiro seja acedido diretamente pelo navegador/URL por segurança
+if (basename($_SERVER['SCRIPT_FILENAME']) === basename(__FILE__)) {
+    header("HTTP/1.1 403 Forbidden");
+    exit(json_encode(["success" => false, "message" => "Acesso direto não permitido."]));
+}
+
+/**
+ * Regista automaticamente qualquer evento no sistema.
+ * Não depende de requisições do utilizador (100% em background).
+ * 
+ * @param mysqli $conn Conexão ativa com a base de dados
+ * @param int|null $id_funcionario ID do utilizador logado na sessão
+ * @param string $acao Tipo de movimentação (Ex: 'VEND_PROCESSADA', 'STOCK_ALTERADO')
+ * @param string $detalhes Descrição detalhada do que aconteceu
+ * @param string $modulo O módulo onde o evento ocorreu
+ * @return bool Retorna true se gravou, false se falhou
+ */
+function registarAuditoria($conn, $id_funcionario, $acao, $detalhes, $modulo = 'Geral') {
+    // 1. Validação de Conexão
+    if (!$conn) {
+        error_log("Pharmora Audit Error: Sem conexão com a base de dados.");
+        return false;
+    }
+
+    // 2. Captura Automática de Metadados (Sem intervenção humana)
+    $ip_origem = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
+    $acao      = strtoupper(trim($acao));
+    $detalhes  = trim($detalhes);
+    $modulo    = trim($modulo);
+
+    if (empty($detalhes)) {
+        return false;
+    }
+
+    // 3. Gravação Blindada na Base de Dados
+    try {
+        $sql = "INSERT INTO auditoria_logs (id_funcionario, acao, detalhes, modulo, ip_origem) VALUES (?, ?, ?, ?, ?)";
+        
+        $stmt = $conn->prepare($sql);
+        if (!$stmt) {
+            error_log("Pharmora Audit Error (Prepare): " . $conn->error);
+            return false;
+        }
+
+        // Liga os parâmetros com segurança contra SQL Injection
+        $stmt->bind_param("issss", $id_funcionario, $acao, $detalhes, $modulo, $ip_origem);
+        $sucesso = $stmt->execute();
+        
+        $stmt->close();
+        return $sucesso;
+
+    } catch (Exception $e) {
+        // Grava o erro no log do servidor de forma silenciosa para o utilizador comum
+        error_log("Pharmora Audit Exception: " . $e->getMessage());
+        return false;
+    }
+}
