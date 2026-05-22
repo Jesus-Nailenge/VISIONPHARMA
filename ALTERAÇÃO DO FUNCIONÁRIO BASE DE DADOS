@@ -1,0 +1,4 @@
+SELECT l.*, f.nome 
+FROM auditoria_logs l
+LEFT JOIN funcionarios f ON l.id_funcionario = f.id
+ORDER BY l.data_registo DESC; --
