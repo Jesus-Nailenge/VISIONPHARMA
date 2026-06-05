@@ -1,130 +1,202 @@
 <?php
+// 1. CONEXÃO COM O BANCO DE DADOS (Padrão MySQLi usado no teu sistema)
+$conn = new mysqli("localhost", "root", "", "pharmora_db");
+if ($conn->connect_error) { 
+    die("Erro de Conexão: " . $conn->connect_error); 
+}
 
-class PharmoraRelatorios {
-    private $pdo;
-
-    public function __construct(PDO $pdo) {
-        $this->pdo = $pdo;
-    }
-
-    /**
-     * 1. BALANÇO FINANCEIRO GERAL (DRE SIMPLIFICADO)
-     * Retorna o total de receitas, despesas, perdas e o lucro líquido do período.
-     */
-    public function obterBalancoGeral(string $dataInicio, string $dataFim): array {
-        $sql = "SELECT 
+// 2. QUERY: BALANÇO GERAL (DRE SIMPLIFICADO)
+$sql_balanco = "SELECT 
                     SUM(CASE WHEN tipo = 'RECEITA' THEN valor_liquido ELSE 0.00 END) AS total_receitas,
                     SUM(CASE WHEN tipo = 'DESPESA' THEN valor_liquido ELSE 0.00 END) AS total_despesas,
                     SUM(CASE WHEN tipo = 'PERDA' THEN valor_liquido ELSE 0.00 END) AS total_perdas
-                FROM financeiro_movimentacoes
-                WHERE data_registro BETWEEN :inicio AND :fim";
+                FROM financeiro_movimentacoes";
+$res_balanco = $conn->query($sql_balanco);
+$dados_balanco = $res_balanco->fetch_assoc();
 
-        $stmt = $this->pdo->prepare($sql);
-        $stmt->execute([
-            ':inicio' => $dataInicio . ' 00:00:00',
-            ':fim'    => $dataFim . ' 23:59:59'
-        ]);
+$receitas = $dados_balanco['total_receitas'] ?? 0.00;
+$despesas = $dados_balanco['total_despesas'] ?? 0.00;
+$perdas   = $dados_balanco['total_perdas'] ?? 0.00;
+$lucro_liquido = $receitas - ($despesas + $perdas);
 
-        $dados = $stmt->fetch(PDO::FETCH_ASSOC);
+// 3. QUERY: FATURAMENTO POR MÉTODO DE PAGAMENTO
+$sql_metodos = "SELECT metodo_pagamento, COUNT(*) AS qtd, SUM(valor_liquido) AS total 
+                FROM financeiro_movimentacoes 
+                WHERE tipo = 'RECEITA' AND origem = 'VENDA' 
+                GROUP BY metodo_pagamento ORDER BY total DESC";
+$res_metodos = $conn->query($sql_metodos);
+
+// 4. QUERY: DIAGNÓSTICO DE CONTAS A PAGAR
+$sql_contas = "SELECT status_conta, COUNT(*) AS qtd, SUM(valor_original) AS total_orig, SUM(valor_pago) AS total_pago 
+               FROM financeiro_contas_pagar GROUP BY status_conta";
+$res_contas = $conn->query($sql_contas);
+
+// 5. QUERY: RANKING DE PERDAS DE ESTOQUE (Casando com a tua nova tabela 'perdas')
+$sql_perdas_res = "SELECT motivo, COUNT(*) AS qtd, SUM(quantidade) AS itens, SUM(valor_prejuizo_total) AS total_prejuizo 
+                   FROM perdas GROUP BY motivo ORDER BY total_prejuizo DESC";
+$res_perdas_res = $conn->query($sql_perdas_res);
+?>
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pharmora | Relatórios Gerais</title>
+    <style>
+        :root { 
+            --bg: #050505; 
+            --card: #111; 
+            --accent: #00ffcc; 
+            --text: #eaeaea; 
+            --danger: #ff4d4d;
+            --warning: #ffaa00;
+        }
+        body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 30px; }
         
-        $receitas = $dados['total_receitas'] ?? 0.00;
-        $despesas = $dados['total_despesas'] ?? 0.00;
-        $perdas = $dados['total_perdas'] ?? 0.00;
+        .header { display: flex; justify-content: space-between; align-items: center; max-width: 1200px; margin: 0 auto 30px; }
+        h2 { color: var(--accent); text-transform: uppercase; letter-spacing: 1px; margin: 0; }
+        h3 { color: #fff; margin: 20px 0 10px 0; font-size: 16px; text-transform: uppercase; letter-spacing: 0.5px; }
+
+        /* Estilo dos Cards de KPI Superiores */
+        .kpi-container { display: flex; gap: 20px; max-width: 1200px; margin: 0 auto 30px auto; flex-wrap: wrap; }
+        .kpi-card { flex: 1; min-width: 220px; background: var(--card); padding: 20px; border-radius: 8px; border: 1px solid #222; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
+        .kpi-title { font-size: 12px; color: #888; text-transform: uppercase; margin-bottom: 5px; }
+        .kpi-value { font-size: 22px; font-weight: bold; font-family: monospace; }
         
-        $lucroLiquido = $receitas - ($despesas + $perdas);
+        .table-wrapper { max-width: 1200px; margin: 0 auto 40px auto; background: var(--card); border-radius: 10px; overflow-x: auto; box-shadow: 0 5px 15px rgba(0,0,0,0.5); border: 1px solid #222; }
+        table { width: 100%; border-collapse: collapse; min-width: 800px; }
+        th { background: #161616; padding: 16px; font-size: 11px; text-transform: uppercase; color: #888; text-align: left; border-bottom: 2px solid #222; }
+        td { padding: 16px; border-bottom: 1px solid #222; font-size: 14px; vertical-align: middle; }
+        tr:hover { background: rgba(255,255,255,0.02); }
 
-        return [
-            'total_receitas' => (float)$receitas,
-            'total_despesas' => (float)$despesas,
-            'total_perdas'   => (float)$perdas,
-            'lucro_liquido'  => (float)$lucroLiquido
-        ];
-    }
+        .pill { padding: 5px 12px; border-radius: 20px; font-size: 11px; font-weight: bold; text-transform: uppercase; display: inline-block; }
+        .pill-success { background: rgba(0, 255, 204, 0.1); color: var(--accent); }
+        .pill-danger { background: rgba(255, 77, 77, 0.1); color: var(--danger); }
+        .pill-warning { background: rgba(255, 170, 0, 0.1); color: var(--warning); }
+    </style>
+</head>
+<body>
 
-    /**
-     * 2. FATURAMENTO POR MÉTODO DE PAGAMENTO
-     * Identifica quais canais de entrada trazem mais dinheiro.
-     */
-    public function obterFaturamentoPorMetodo(string $dataInicio, string $dataFim): array {
-        $sql = "SELECT metodo_pagamento, 
-                       COUNT(*) AS quantidade_vendas,
-                       SUM(valor_liquido) AS total_faturado
-                FROM financeiro_movimentacoes
-                WHERE tipo = 'RECEITA' AND origem = 'VENDA'
-                  AND data_registro BETWEEN :inicio AND :fim
-                GROUP BY metodo_pagamento
-                ORDER BY total_faturado DESC";
+<div class="header">
+    <h2>Relatórios Gerais</h2>
+    <span style="color: #666; font-size: 14px;">Módulo Financeiro Consolidado</span>
+</div>
 
-        $stmt = $this->pdo->prepare($sql);
-        $stmt->execute([
-            ':inicio' => $dataInicio . ' 00:00:00',
-            ':fim'    => $dataFim . ' 23:59:59'
-        ]);
+<div class="kpi-container">
+    <div class="kpi-card" style="border-left: 4px solid var(--accent);">
+        <div class="kpi-title">Receitas Totais</div>
+        <div class="kpi-value" style="color: var(--accent);">Kz <?php echo number_format($receitas, 2, ',', '.'); ?></div>
+    </div>
+    <div class="kpi-card" style="border-left: 4px solid var(--danger);">
+        <div class="kpi-title">Despesas Operacionais</div>
+        <div class="kpi-value" style="color: var(--danger);">Kz <?php echo number_format($despesas, 2, ',', '.'); ?></div>
+    </div>
+    <div class="kpi-card" style="border-left: #ffaa00 solid 4px;">
+        <div class="kpi-title">Perdas de Stock</div>
+        <div class="kpi-value" style="color: var(--warning);">Kz <?php echo number_format($perdas, 2, ',', '.'); ?></div>
+    </div>
+    <div class="kpi-card" style="border-left: 4px solid <?php echo $lucro_liquido >= 0 ? 'var(--accent)' : 'var(--danger)'; ?>;">
+        <div class="kpi-title">Lucro Líquido Real</div>
+        <div class="kpi-value" style="color: <?php echo $lucro_liquido >= 0 ? '#fff' : 'var(--danger)'; ?>;">
+            Kz <?php echo number_format($lucro_liquido, 2, ',', '.'); ?>
+        </div>
+    </div>
+</div>
 
-        return $stmt->fetchAll(PDO::FETCH_ASSOC);
-    }
+<div class="table-wrapper">
+    <div style="padding: 16px 20px; font-weight: bold; color: var(--accent);">1. FATURAMENTO POR MÉTODO DE PAGAMENTO</div>
+    <table>
+        <thead>
+            <tr>
+                <th>Método de Pagamento</th>
+                <th>Volume de Vendas</th>
+                <th>Total Arrecadado</th>
+            </tr>
+        </thead>
+        <tbody>
+            <?php if ($res_metodos && $res_metodos->num_rows > 0): ?>
+                <?php while($row = $res_metodos->fetch_assoc()): ?>
+                    <tr>
+                        <td><span class="pill pill-success"><?php echo htmlspecialchars(strtoupper($row['metodo_pagamento'])); ?></span></td>
+                        <td><?php echo $row['qtd']; ?> transações</td>
+                        <td style="font-family: monospace; font-weight: bold;">Kz <?php echo number_format($row['total'], 2, ',', '.'); ?></td>
+                    </tr>
+                <?php endwhile; ?>
+            <?php else: ?>
+                <tr><td colspan="3" style="text-align: center; color: #666;">Nenhum faturamento registrado.</td></tr>
+            <?php endif; ?>
+        </tbody>
+    </table>
+</div>
 
-    /**
-     * 3. DIAGNÓSTICO DE CONTAS A PAGAR
-     * Agrupa as contas por status para entender o endividamento.
-     */
-    public function obterResumoContasAPagar(): array {
-        $sql = "SELECT status_conta,
-                       COUNT(*) AS quantidade_contas,
-                       SUM(valor_original) AS total_original,
-                       SUM(valor_pago) AS total_pago,
-                       SUM(CASE WHEN status_conta IN ('PENDENTE', 'VENCIDO') THEN (valor_original - valor_pago) ELSE 0.00 END) AS total_pendente
-                FROM financeiro_contas_pagar
-                GROUP BY status_conta
-                ORDER BY total_original DESC";
+<div class="table-wrapper">
+    <div style="padding: 16px 20px; font-weight: bold; color: #ffaa00;">2. DIAGNÓSTICO DE CONTAS A PAGAR</div>
+    <table>
+        <thead>
+            <tr>
+                <th>Estado da Conta</th>
+                <th>Qtd Contas</th>
+                <th>Montante Original</th>
+                <th>Total Liquidado</th>
+                <th>Dívida Pendente</th>
+            </tr>
+        </thead>
+        <tbody>
+            <?php if ($res_contas && $res_contas->num_rows > 0): ?>
+                <?php while($row = $res_contas->fetch_assoc()): ?>
+                    <?php 
+                        $pendente = in_array($row['status_conta'], ['PENDENTE', 'VENCIDO']) ? ($row['total_orig'] - $row['total_pago']) : 0.00; 
+                    ?>
+                    <tr>
+                        <td>
+                            <span class="pill <?php echo ($row['status_conta'] == 'PAGO') ? 'pill-success' : (($row['status_conta'] == 'VENCIDO') ? 'pill-danger' : 'pill-warning'); ?>">
+                                <?php echo htmlspecialchars($row['status_conta']); ?>
+                            </span>
+                        </td>
+                        <td><?php echo $row['qtd']; ?> correspondências</td>
+                        <td style="font-family: monospace;">Kz <?php echo number_format($row['total_orig'], 2, ',', '.'); ?></td>
+                        <td style="font-family: monospace; color: var(--accent);">Kz <?php echo number_format($row['total_pago'], 2, ',', '.'); ?></td>
+                        <td style="font-family: monospace; color: var(--danger); font-weight: bold;">Kz <?php echo number_format($pendente, 2, ',', '.'); ?></td>
+                    </tr>
+                <?php endwhile; ?>
+            <?php else: ?>
+                <tr><td colspan="5" style="text-align: center; color: #666;">Nenhuma obrigação financeira cadastrada.</td></tr>
+            <?php endif; ?>
+        </tbody>
+    </table>
+</div>
 
-        $stmt = $this->pdo->query($sql);
-        return $stmt->fetchAll(PDO::FETCH_ASSOC);
-    }
+<div class="table-wrapper">
+    <div style="padding: 16px 20px; font-weight: bold; color: var(--danger);">3. MAPA DE PREJUÍZO E PERDAS DE STOCK</div>
+    <table>
+        <thead>
+            <tr>
+                <th>Motivo do Descarte / Sinistro</th>
+                <th>Ocorrências</th>
+                <th>Unidades Perdidas</th>
+                <th>Impacto Financeiro</th>
+            </tr>
+        </thead>
+        <tbody>
+            <?php if ($res_perdas_res && $res_perdas_res->num_rows > 0): ?>
+                <?php while($row = $res_perdas_res->fetch_assoc()): ?>
+                    <tr>
+                        <td><strong><?php echo htmlspecialchars($row['motivo']); ?></strong></td>
+                        <td><?php echo $row['qtd']; ?> registos</td>
+                        <td><?php echo $row['itens']; ?> un.</td>
+                        <td style="font-family: monospace; color: var(--danger); font-weight: bold;">Kz <?php echo number_format($row['total_prejuizo'], 2, ',', '.'); ?></td>
+                    </tr>
+                <?php endwhile; ?>
+            <?php else: ?>
+                <tr><td colspan="4" style="text-align: center; color: #666;">Nenhum registo de perda ou quebra de stock até ao momento.</td></tr>
+            <?php endif; ?>
+        </tbody>
+    </table>
+</div>
 
-    /**
-     * 4. RANKING E ANÁLISE DE PERDAS DE ESTOQUE (ATUALIZADO)
-     * Ajustado para ler a tabela 'perdas' e a coluna 'valor_prejuizo_total'
-     */
-    public function obterResumoPerdas(string $dataInicio, string $dataFim): array {
-        // CORREÇÃO: Tabela mudou para 'perdas' e coluna para 'valor_prejuizo_total'
-        $sql = "SELECT motivo,
-                       COUNT(*) AS total_ocorrencias,
-                       SUM(quantidade) AS produtos_perdidos,
-                       SUM(valor_prejuizo_total) AS prejuizo_financeiro
-                FROM perdas
-                WHERE data_registro BETWEEN :inicio AND :fim
-                GROUP BY motivo
-                ORDER BY prejuizo_financeiro DESC";
-
-        $stmt = $this->pdo->prepare($sql);
-        $stmt->execute([
-            ':inicio' => $dataInicio . ' 00:00:00',
-            ':fim'    => $dataFim . ' 23:59:59'
-        ]);
-
-        return $stmt->fetchAll(PDO::FETCH_ASSOC);
-    }
-
-    /**
-     * 5. EVOLUÇÃO DOS CUSTOS DE PESSOAL (FOLHA DE PAGAMENTO)
-     * Consolida os gastos reais com funcionários.
-     */
-    public function obterCustosComPessoal(int $ano): array {
-        $sql = "SELECT mes_referencia,
-                       COUNT(DISTINCT id_funcionario) AS total_funcionarios,
-                       SUM(salario_base) AS total_salario_base,
-                       SUM(subsidios_bonus) AS total_beneficios,
-                       SUM(descontos_faltas + descontos_impostos) AS total_retencoes,
-                       SUM(valor_pago_liquido) AS custo_real_caixa
-                FROM financeiro_pagamentos_funcionarios
-                WHERE ano_referencia = :ano AND status_pagamento = 'PAGO'
-                GROUP BY mes_referencia
-                ORDER BY mes_referencia ASC";
-
-        $stmt = $this->pdo->prepare($sql);
-        $stmt->execute([':ano' => $ano]);
-
-        return $stmt->fetchAll(PDO::FETCH_ASSOC);
-    }
-}
+</body>
+</html>
+<?php 
+// Fecha a ligação de forma limpa
+$conn->close(); 
+?>
