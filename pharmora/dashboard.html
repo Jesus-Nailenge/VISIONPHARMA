@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>VisionPharma | Centro de Comando</title>
+    
+    <link rel="stylesheet" href="global.css"> 
+    <link rel="stylesheet" href="assets/fontawesome/css/all.min.css">
+
+   <style>
+    :root {
+        --bg-color: #020202;
+        --card-bg: rgba(255, 255, 255, 0.03);
+        --card-border: rgba(255, 255, 255, 0.08);
+        --text-main: #ffffff;
+        --text-dim: #888888;
+        --accent: #00ffcc;
+        --danger: #ff4444;
+        --input-fill: rgba(255, 255, 255, 0.05);
+        --logo-filter: invert(1) brightness(1.8);
+        --sidebar-width: 260px;
+    }
+
+    [data-theme="light"] {
+        --bg-color: #f0f0f2;
+        --card-bg: rgba(255, 255, 255, 0.7);
+        --card-border: rgba(0, 0, 0, 0.06);
+        --text-main: #000000;
+        --text-dim: #666666;
+        --accent: #008f72;
+        --input-fill: rgba(0, 0, 0, 0.04);
+        --logo-filter: none;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; font-family: "Inter", sans-serif; }
+
+    body {
+        background-color: var(--bg-color); color: var(--text-main);
+        height: 100vh; display: flex; overflow: hidden;
+        transition: background 0.4s ease;
+    }
+
+    /* TEXTURA CINEMATOGRÁFICA */
+    body::before {
+        content: ""; position: fixed; inset: 0; z-index: 0;
+        background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+        opacity: 0.03; pointer-events: none;
+    }
+
+    /* SIDEBAR (MENU LATERAL) */
+    .sidebar {
+        width: var(--sidebar-width); height: 100%;
+        background: var(--card-bg); border-right: 1px solid var(--card-border);
+        backdrop-filter: blur(20px); z-index: 50;
+        display: flex; flex-direction: column; transition: 0.4s ease;
+        flex-shrink: 0; /* Impede que a tela esprema o menu */
+    }
+
+    .sidebar.collapsed { width: 80px; }
+    
+    .brand-area {
+        height: 80px; display: flex; align-items: center; justify-content: center;
+        border-bottom: 1px solid var(--card-border);
+    }
+    .brand-logo { width: 140px; filter: var(--logo-filter); transition: 0.3s; }
+    .sidebar.collapsed .brand-logo { width: 40px; }
+
+    .menu-wrapper { flex: 1; overflow-y: auto; padding: 20px 0; }
+    .menu-wrapper::-webkit-scrollbar { width: 4px; }
+    .menu-wrapper::-webkit-scrollbar-thumb { background: var(--card-border); }
+
+    .menu-category {
+        font-size: 10px; color: var(--text-dim); text-transform: uppercase;
+        letter-spacing: 2px; margin: 15px 25px 10px; font-weight: 700;
+    }
+    .sidebar.collapsed .menu-category { display: none; }
+
+    .menu-item {
+        display: flex; align-items: center; padding: 14px 25px;
+        color: var(--text-main); text-decoration: none; font-size: 14px;
+        border-left: 3px solid transparent; transition: 0.3s; cursor: pointer;
+    }
+    .menu-item i { width: 25px; font-size: 18px; color: var(--text-dim); transition: 0.3s; }
+    .menu-item span { margin-left: 10px; white-space: nowrap; transition: opacity 0.3s; }
+    .sidebar.collapsed .menu-item span { opacity: 0; pointer-events: none; }
+
+    .menu-item:hover, .menu-item.active { background: var(--input-fill); border-left-color: var(--accent); }
+    .menu-item:hover i, .menu-item.active i { color: var(--accent); }
+
+    /* ÁREA PRINCIPAL (MAIN STAGE) - AQUI ESTÁ A MÁGICA */
+    .main-content {
+        flex: 1; 
+        display: flex; 
+        flex-direction: column; 
+        position: relative; 
+        z-index: 10;
+        min-width: 0; /* CRÍTICO: Impede que tabelas internas criem barra de rolagem horizontal na tela inteira */
+        transform: translateZ(0); /* CRÍTICO: Prende os modais com position:fixed DENTRO desta área. Nunca mais vaza para o sidebar! */
+    }
+
+    /* TOPBAR */
+    .topbar {
+        height: 80px; display: flex; justify-content: space-between; align-items: center;
+        padding: 0 30px; background: var(--card-bg); border-bottom: 1px solid var(--card-border);
+        backdrop-filter: blur(10px); flex-shrink: 0;
+    }
+
+    .top-left { display: flex; align-items: center; gap: 20px; }
+    .toggle-btn { background: none; border: none; color: var(--text-main); font-size: 20px; cursor: pointer; }
+    .page-title { font-size: 18px; font-weight: 600; letter-spacing: 1px; }
+    .top-right { display: flex; align-items: center; gap: 25px; }
+
+    /* NOTIFICAÇÕES */
+    .notification-bell { position: relative; cursor: pointer; font-size: 20px; color: var(--text-dim); transition: 0.3s; }
+    .notification-bell:hover { color: var(--text-main); }
+    .badge {
+        position: absolute; top: -5px; right: -8px; background: var(--danger);
+        color: white; font-size: 9px; font-weight: bold; width: 16px; height: 16px;
+        border-radius: 50%; display: flex; align-items: center; justify-content: center;
+        border: 2px solid var(--bg-color);
+    }
+
+    /* PERFIL DO USUÁRIO */
+    .user-profile { display: flex; align-items: center; gap: 15px; cursor: pointer; padding: 5px 10px; border-radius: 12px; transition: 0.3s; }
+    .user-profile:hover { background: var(--input-fill); }
+    .user-info { text-align: right; }
+    .user-name { font-size: 13px; font-weight: 700; color: var(--text-main); }
+    .user-role { font-size: 11px; color: var(--accent); letter-spacing: 1px; text-transform: uppercase; }
+    .user-avatar { width: 40px; height: 40px; border-radius: 10px; object-fit: cover; border: 1px solid var(--card-border); }
+
+    /* VIEWPORT (ONDE AS TELAS ABREM) */
+    .viewport {
+        flex: 1; padding: 30px; overflow-y: auto; overflow-x: hidden; position: relative; min-width: 0;
+    }
+
+    /* RODAPÉ DO SISTEMA */
+    footer {
+        padding: 15px; text-align: center; border-top: 1px solid var(--card-border);
+        background: var(--card-bg); z-index: 10; flex-shrink: 0;
+    }
+    .footer-line { font-size: 9px; letter-spacing: 2px; color: var(--text-dim); line-height: 1.8; font-weight: 500; }
+    .footer-line b { color: var(--text-main); opacity: 0.8; }
+
+    /* Loader */
+    .loader { width: 40px; height: 40px; border: 3px solid var(--card-border); border-top-color: var(--accent); border-radius: 50%; animation: spin 1s linear infinite; margin: 100px auto; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* RESPONSIVIDADE EXTREMA DO DASHBOARD */
+    @media (max-width: 768px) {
+        .topbar { padding: 0 15px; }
+        .viewport { padding: 15px; }
+        .page-title { display: none; } /* Oculta título longo em celulares pequenos */
+        .user-info { display: none; } /* Oculta nome/cargo, deixa só o avatar */
+    }
+</style>
+</head>
+<body data-theme="dark">
+
+    <nav class="sidebar" id="sidebar">
+        <div class="brand-area">
+            <img src="assets/imagem/svg/logo.svg" alt="VisionPharma" class="brand-logo" id="logo-img">
+        </div>
+
+        <div class="menu-wrapper" id="menu-container">
+            </div>
+    </nav>
+
+    <main class="main-content">
+        
+        <header class="topbar">
+            <div class="top-left">
+                <button class="toggle-btn" onclick="toggleSidebar()"><i class="fas fa-bars"></i></button>
+                <h1 class="page-title" id="active-page-title">Dashboard Inicial</h1>
+            </div>
+
+            <div class="top-right">
+                <button onclick="toggleTheme()" style="background:none; border:none; color:var(--text-dim); font-size:18px; cursor:pointer;">
+                    <i class="fas fa-moon" id="theme-icon"></i>
+                </button>
+                
+                <div class="notification-bell" onclick="openNotifications()">
+                    <i class="fas fa-bell"></i>
+                    <span class="badge" id="notif-count">3</span>
+                </div>
+
+                <div class="user-profile" onclick="openProfileOptions()">
+                    <div class="user-info">
+                        <div class="user-name" id="ui-username">Carregando...</div>
+                        <div class="user-role" id="ui-userrole">...</div>
+                    </div>
+                    <img src="assets/imagem/avatar.jpg" alt="Avatar" class="user-avatar" id="ui-avatar">
+                </div>
+            </div>
+        </header>
+
+        <div class="viewport" id="viewport-stage">
+            <div style="background: var(--card-bg); border: 1px solid var(--card-border); padding: 40px; border-radius: 20px; text-align: center; margin-top: 50px;">
+                <i class="fas fa-shield-alt" style="font-size: 40px; color: var(--accent); margin-bottom: 20px;"></i>
+                <h2>Bem-vindo ao Sistema VisionPharma</h2>
+                <p style="color: var(--text-dim); margin-top: 10px; font-size: 14px;">A sua sessão está autenticada e protegida.</p>
+            </div>
+        </div>
+
+        <footer>
+            <div class="footer-line"><b>VISIONPHARMA V1.0.0.0</b> • BUILD BETA</div>
+            <div class="footer-line">© VISIONPHARMA 2026 • TODOS DIREITOS RESERVADOS</div>
+        </footer>
+		<!-- Modal de Confirmação Global -->
+<div id="modal-confirm" class="modal-confirm-overlay" style="display: none;">
+    <div class="modal-confirm-box">
+        <div class="modal-confirm-icon">
+            <i class="fas fa-exclamation-triangle"></i>
+        </div>
+        <h3 id="confirm-title">Confirmar Ação</h3>
+        <p id="confirm-msg">Você tem certeza que deseja prosseguir com esta operação?</p>
+        <div class="modal-confirm-buttons">
+            <button class="btn-confirm-cancel" onclick="closeConfirmModal()">Cancelar</button>
+            <button id="btn-confirm-execute" class="btn-confirm-action">Confirmar</button>
+        </div>
+    </div>
+
+    </main>
+  
+  <script>
+    // 1. CONFIGURAÇÃO DE REDE (MUITO IMPORTANTE)
+// Usa o mesmo IP que configuraste no Login
+const SERVER_IP = localStorage.getItem('pharmora_ip') || "192.168.206.192"; 
+// AJUSTE AQUI: O nome da pasta deve ser 'pharmora' para bater com o teu servidor
+const BASE_URL = `http://${SERVER_IP}/pharmora`;
+
+    const systemMenu = [
+    { type: 'category', title: 'Operacional' },
+    { id: 'dashboard', icon: 'fa-chart-pie', text: 'Painel Principal', perm: 'ver_dashboard' },
+    { id: 'vendas', icon: 'fa-shopping-cart', text: 'Terminal de Vendas', perm: 'ver_vendas' },
+    // CORREÇÃO: Agora usa a permissão específica ver_perdas
+    { id: 'perdas', icon: 'fa-trash-alt', text: 'Gestão de Perdas', perm: 'ver_perdas' },
+    
+    { type: 'category', title: 'Inventário' },
+    { id: 'estoque', icon: 'fa-boxes', text: 'Controle de Estoque', perm: 'ver_estoque' },
+    // CORREÇÃO: Agora usa a permissão específica ver_fornecedores
+    { id: 'fornecedores', icon: 'fa-truck-loading', text: 'Fornecedores', perm: 'ver_fornecedores' },
+    
+    { type: 'category', title: 'Administração' },
+    { id: 'funcionarios', icon: 'fa-users-cog', text: 'Funcionários & Acessos', perm: 'gerir_usuarios' },
+    { id: 'financeiro', icon: 'fa-wallet', text: 'Gestão Financeira', perm: 'ver_financeiro' },
+    
+    { type: 'category', title: 'Inteligência' },
+    { id: 'relatorios', icon: 'fa-file-invoice-dollar', text: 'Relatórios Gerais', perm: 'ver_relatorios' },
+    { id: 'auditoria', icon: 'fa-fingerprint', text: 'Logs de Auditoria', perm: 'ver_logs' },
+    
+    { type: 'category', title: 'Sistema' },
+    { id: 'definicoes', icon: 'fa-sliders-h', text: 'Definições', perm: 'ver_dashboard' },
+    { id: 'logout', icon: 'fa-sign-out-alt', text: 'Terminar Sessão', perm: 'ver_dashboard', isAction: true }
+];
+
+    function initDashboard() {
+        const userDataStr = localStorage.getItem('pharmora_user_data');
+        const mockUser = {
+            nome: "Belardino Capessa",
+            cargo: "Administrador",
+            foto: "assets/imagem/avatar.jpg",
+            permissoes: {
+                ver_dashboard: true, ver_vendas: true, ver_estoque: true,
+                gerir_usuarios: true, ver_financeiro: true, ver_relatorios: true, ver_logs: true
+            }
+        };
+        
+        const user = userDataStr ? JSON.parse(userDataStr) : mockUser;
+        document.getElementById('ui-username').textContent = user.nome;
+        document.getElementById('ui-userrole').textContent = user.cargo;
+        
+        // Garante que a foto de perfil carregue do servidor
+        document.getElementById('ui-avatar').src = user.foto.includes('http') ? user.foto : `${BASE_URL}/${user.foto}`;
+
+        buildMenu(user.permissoes);
+        loadModule('dashboard', 'Painel Principal');
+    }
+
+    function buildMenu(userPerms) {
+        const container = document.getElementById('menu-container');
+        container.innerHTML = '';
+
+        systemMenu.forEach(item => {
+            if (item.type === 'category') {
+                const cat = document.createElement('div');
+                cat.className = 'menu-category';
+                cat.textContent = item.title;
+                container.appendChild(cat);
+            } else if (userPerms[item.perm]) {
+                const link = document.createElement('a');
+                link.className = 'menu-item';
+                link.id = `menu-${item.id}`;
+                link.innerHTML = `<i class="fas ${item.icon}"></i><span>${item.text}</span>`;
+                link.onclick = (e) => {
+                    e.preventDefault();
+                    item.isAction ? handleLogout() : loadModule(item.id, item.text);
+                };
+                container.appendChild(link);
+            }
+        });
+    }
+
+    // 2. FUNÇÃO QUE PONTUA PARA O SERVIDOR REAL
+    async function loadModule(moduleId, title) {
+        const viewport = document.getElementById('viewport-stage');
+        document.querySelectorAll('.menu-item').forEach(el => el.classList.remove('active'));
+        const activeMenu = document.getElementById(`menu-${moduleId}`);
+        if(activeMenu) activeMenu.classList.add('active');
+        
+        document.getElementById('active-page-title').textContent = title;
+        viewport.innerHTML = '<div style="display:flex; justify-content:center; padding:50px;"><i class="fas fa-circle-notch fa-spin" style="font-size:30px; color:var(--accent)"></i></div>';
+
+        try {
+            // BUSCA O PHP NO SERVIDOR REMOTO
+            const response = await fetch(`${BASE_URL}/modules/${moduleId}.php`);
+            if (!response.ok) throw new Error("Erro na rede");
+
+            let html = await response.text();
+
+            // AJUSTE DE LINKS: Se o PHP retornar caminhos de imagem como "assets/...", 
+            // o celular não vai achar. Forçamos o caminho completo do servidor.
+            html = html.replace(/src="assets\//g, `src="${BASE_URL}/assets/`);
+            html = html.replace(/src="uploads\//g, `src="${BASE_URL}/uploads/`);
+
+            viewport.innerHTML = html;
+
+            // Executar scripts internos do módulo carregado
+            const scripts = viewport.querySelectorAll("script");
+            scripts.forEach(s => eval(s.innerHTML));
+
+        } catch (err) {
+            viewport.innerHTML = `
+                <div style="text-align:center; padding:50px; color:var(--danger)">
+                    <i class="fas fa-wifi-slash" style="font-size:40px; margin-bottom:15px;"></i>
+                    <p>Sem conexão com o servidor VisionPharma.</p>
+                    <button onclick="loadModule('${moduleId}', '${title}')" style="margin-top:15px; background:var(--accent); border:none; padding:10px 20px; border-radius:5px; cursor:pointer;">TENTAR NOVAMENTE</button>
+                </div>`;
+        }
+    }
+
+    function toggleSidebar() { document.getElementById('sidebar').classList.toggle('collapsed'); }
+    function toggleTheme() {
+        const body = document.body;
+        const isDark = body.getAttribute('data-theme') === 'dark';
+        body.setAttribute('data-theme', isDark ? 'light' : 'dark');
+        document.getElementById('theme-icon').className = isDark ? 'fas fa-sun' : 'fas fa-moon';
+    }
+
+    // ================= LOGOUT DO SISTEMA =================
+async function handleLogout() {
+    // 0. Confirmação com o Modal Global
+    const confirmou = await confirmarAcao(
+        'Encerrar Sessão', 
+        'Deseja realmente sair do sistema Pharmora?',
+        'var(--accent)' // Botão de confirmação na cor do sistema
+    );
+
+    if(!confirmou) return;
+
+    // 1. Feedback Visual Imediato
+    const viewport = document.getElementById('viewport-stage');
+    const pageTitle = document.getElementById('active-page-title');
+
+    if (pageTitle) pageTitle.textContent = "ENCERRANDO SESSÃO...";
+    
+    // 2. Limpar a área de trabalho para foco no encerramento
+    if (viewport) {
+        viewport.innerHTML = `
+            <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 20px; animation: fadeIn 0.5s ease;">
+                <div class="spinner" style="font-size: 40px; color: var(--accent);">
+                    <i class="fas fa-sync-alt fa-spin"></i>
+                </div>
+                <div style="letter-spacing: 5px; font-weight: 800; font-size: 14px; color: var(--text-main); text-align: center;">
+                    TERMINANDO SESSÃO...
+                </div>
+                <div style="color: var(--text-dim); font-size: 10px; letter-spacing: 2px; text-transform: uppercase;">
+                    Sincronizando dados finais de segurança
+                </div>
+            </div>
+        `;
+    }
+
+    // 3. Latência Proposital (1.2 segundos) para efeito estético
+    await new Promise(resolve => setTimeout(resolve, 1200));
+
+    // 4. Limpeza de Dados
+    localStorage.removeItem('pharmora_user_data');
+    
+    // 5. Redirecionamento com efeito de "fade out"
+    document.body.style.opacity = '0';
+    document.body.style.transition = 'opacity 0.6s ease';
+    
+    setTimeout(() => {
+        window.location.href = "index.html";
+    }, 600);
+}
+
+    window.onload = initDashboard;
+</script>
+<script src="/pharmora/global.js"></script>
+</div>
+</body>
+</html>

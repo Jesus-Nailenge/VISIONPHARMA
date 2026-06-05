@@ -1,0 +1,21 @@
+-- Tabela de Itens da Venda (O que foi vendido)
+CREATE TABLE IF NOT EXISTS vendas_itens (
+    id_item INT AUTO_INCREMENT PRIMARY KEY,
+    venda_id INT NOT NULL,
+    produto_id INT NOT NULL,
+    qtd INT NOT NULL,
+    preco_unitario DECIMAL(10,2) NOT NULL, -- Preço praticado no momento da venda
+    subtotal DECIMAL(10,2) NOT NULL,       -- qtd * preco_unitario
+    
+    -- Relacionamento com a venda principal
+    CONSTRAINT fk_venda_pai FOREIGN KEY (venda_id) 
+        REFERENCES vendas(id_venda) 
+        ON DELETE CASCADE,
+        
+    -- Relacionamento com os produtos
+    CONSTRAINT fk_produto_venda FOREIGN KEY (produto_id) 
+        REFERENCES produtos(id_produto)
+) ENGINE=InnoDB;
+
+-- 3. Índice para acelerar relatórios e buscas
+CREATE INDEX idx_venda_relacionada ON vendas_itens(venda_id);

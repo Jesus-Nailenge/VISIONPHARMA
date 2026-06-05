@@ -1,0 +1,18 @@
+CREATE TABLE IF NOT EXISTS auditoria_logs (
+    id_log INT AUTO_INCREMENT PRIMARY KEY,
+    
+    -- Tipo de ação (Ex: 'LOGIN_SUCESSO', 'UPDATE_FORNECEDOR', 'STOCK_BAIXO', 'ERRO_SISTEMA')
+    acao VARCHAR(50) NOT NULL, 
+    
+    -- Descrição detalhada do evento do sistema
+    detalhes TEXT NOT NULL, 
+    
+    -- Em qual parte do sistema aconteceu (Ex: 'Fornecedores', 'Vendas', 'Inventário', 'API')
+    modulo VARCHAR(50) DEFAULT 'Sistema', 
+    
+    -- Endereço IP que disparou ou originou o evento do sistema
+    ip_origem VARCHAR(45) NOT NULL, 
+    
+    -- Data e Hora exata do evento do sistema
+    data_hora TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;

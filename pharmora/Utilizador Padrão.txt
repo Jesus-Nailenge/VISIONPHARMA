@@ -1,0 +1,34 @@
+-- Primeiro, vamos garantir que o utilizador antigo saia para não dar erro de ID duplicado
+DELETE FROM funcionarios WHERE username = 'admin';
+
+-- Agora inserimos com o HASH REAL e VÁLIDO
+INSERT INTO funcionarios (
+    id_funcionario, 
+    nome_completo, 
+    documento_id, 
+    telefone, 
+    sexo, 
+    email, 
+    cargo, 
+    departamento, 
+    username, 
+    password_hash, 
+    nivel_acesso, 
+    permissoes_especiais, 
+    estado_conta
+) VALUES (
+    'PH-2026-001', 
+    'Administrador do Sistema', 
+    '000000000LA000', 
+    '900000000', 
+    'Masculino', 
+    'admin@pharmora.com', 
+    'Administrador de TI', 
+    'Geral', 
+    'admin', 
+    -- ESTE É O HASH CORRETO PARA: 123
+    '123', 
+    'Admin', 
+    '{"ver_dashboard":true,"ver_vendas":true,"gerir_estoque":true,"gerir_usuarios":true,"ver_financeiro":true,"ver_relatorios":true,"ver_logs":true}', 
+    'Ativa'
+);

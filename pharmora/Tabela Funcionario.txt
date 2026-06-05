@@ -1,0 +1,116 @@
+CREATE TABLE IF NOT EXISTS funcionarios (
+    id_sistema INT AUTO_INCREMENT PRIMARY KEY,
+    id_funcionario VARCHAR(20) UNIQUE NOT NULL, -- Ex: PH-2026-001
+    nome_completo VARCHAR(100) NOT NULL,
+    documento_id VARCHAR(50) UNIQUE NOT NULL, -- BI
+    telefone VARCHAR(20),
+    data_nascimento DATE,
+    sexo ENUM('Masculino', 'Feminino'),
+    email VARCHAR(100),
+    morada TEXT,
+    cargo VARCHAR(50), -- CFO, Farmacêutico, etc.
+    departamento VARCHAR(50),
+    tipo_contrato VARCHAR(50),
+    filial VARCHAR(50),
+    data_entrada TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    estado_trabalho ENUM('Ativo', 'Férias', 'Suspenso', 'Inativo') DEFAULT 'Ativo',
+    username VARCHAR(50) UNIQUE NOT NULL,
+    password_hash VARCHAR(255) NOT NULL,
+    nivel_acesso VARCHAR(50), -- Admin, Gestão, Técnico, Staff
+    permissoes_especiais TEXT, -- JSON Dinâmico
+    ultimo_login DATETIME,
+    estado_conta ENUM('Ativa', 'Bloqueada') DEFAULT 'Ativa',
+    dispositivo_usado VARCHAR(100),
+    numero_logins INT DEFAULT 0,
+    foto_perfil VARCHAR(255) DEFAULT 'avatar.png'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+
+
+
+
+
+
+-- 1. TABELA DE FUNCIONÁRIOS (Apenas dados de RH)
+CREATE TABLE IF NOT EXISTS funcionarios (
+    id_sistema INT AUTO_INCREMENT PRIMARY KEY,
+    id_funcionario VARCHAR(20) UNIQUE NOT NULL, -- Ex: PH-2026-001
+    nome_completo VARCHAR(100) NOT NULL,
+    documento_id VARCHAR(50) UNIQUE NOT NULL, -- BI
+    telefone VARCHAR(20),
+    data_nascimento DATE,
+    sexo ENUM('Masculino', 'Feminino'),
+    email VARCHAR(100),
+    morada TEXT,
+    cargo VARCHAR(50), 
+    departamento VARCHAR(50),
+    tipo_contrato VARCHAR(50),
+    filial VARCHAR(50),
+    data_entrada TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    estado_trabalho ENUM('Ativo', 'Férias', 'Suspenso', 'Inativo') DEFAULT 'Ativo',
+    foto_perfil VARCHAR(255) DEFAULT 'avatar.png'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 2. TABELA DE USUÁRIOS (Apenas dados de acesso - Relacionamento 1 para 1 Opcional)
+CREATE TABLE IF NOT EXISTS usuarios (
+    id_usuario INT AUTO_INCREMENT PRIMARY KEY,
+    id_sistema INT UNIQUE NOT NULL, -- Chave Estrangeira ligada ao Funcionário
+    username VARCHAR(50) NULL DEFAULT NULL,
+    password_hash VARCHAR(255) NULL DEFAULT NULL,
+    nivel_acesso VARCHAR(50) DEFAULT 'Staff', -- Admin, Gestão, Técnico, Staff
+    permissoes_especiais TEXT, -- JSON Dinâmico
+    ultimo_login DATETIME,
+    estado_conta ENUM('Ativa', 'Bloqueada') DEFAULT 'Ativa',
+    dispositivo_usado VARCHAR(100),
+    numero_logins INT DEFAULT 0,
+    FOREIGN KEY (id_sistema) REFERENCES funcionarios(id_sistema) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4; 
+
+
+
+
+
+-- 1. Força o MySQL a ignorar temporariamente as amarras e chaves estrangeiras
+SET FOREIGN_KEY_CHECKS = 0;
+
+-- 2. Apaga as duas tabelas completamente (eliminando todos os dados e colunas antigas misturadas)
+DROP TABLE IF EXISTS usuarios;
+DROP TABLE IF EXISTS funcionarios;
+
+-- 3. Reativa a verificação de segurança do banco de dados
+SET FOREIGN_KEY_CHECKS = 1;
+
+-- 4. Cria a tabela de Funcionários LIMPA (Apenas dados de RH - Sem nenhuma coluna de usuário)
+CREATE TABLE funcionarios (
+    id_sistema INT AUTO_INCREMENT PRIMARY KEY,
+    id_funcionario VARCHAR(20) UNIQUE NOT NULL, -- Ex: PH-2026-001
+    nome_completo VARCHAR(100) NOT NULL,
+    documento_id VARCHAR(50) UNIQUE NOT NULL, -- BI
+    telefone VARCHAR(20),
+    data_nascimento DATE,
+    sexo ENUM('Masculino', 'Feminino'),
+    email VARCHAR(100),
+    morada TEXT,
+    cargo VARCHAR(50), 
+    departamento VARCHAR(50),
+    tipo_contrato VARCHAR(50),
+    filial VARCHAR(50),
+    data_entrada TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    estado_trabalho ENUM('Ativo', 'Férias', 'Suspenso', 'Inativo') DEFAULT 'Ativo',
+    foto_perfil VARCHAR(255) DEFAULT 'avatar.png'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 5. Cria a tabela de Usuários separada (Onde ficam o username, senha e permissões)
+CREATE TABLE usuarios (
+    id_usuario INT AUTO_INCREMENT PRIMARY KEY,
+    id_sistema INT UNIQUE NOT NULL, -- Chave Estrangeira ligada ao Funcionário
+    username VARCHAR(50) NULL DEFAULT NULL,
+    password_hash VARCHAR(255) NULL DEFAULT NULL,
+    nivel_acesso VARCHAR(50) DEFAULT 'Staff', -- Admin, Gestão, Técnico, Staff
+    permissoes_especiais TEXT, -- JSON Dinâmico
+    ultimo_login DATETIME,
+    estado_conta ENUM('Ativa', 'Bloqueada') DEFAULT 'Ativa',
+    dispositivo_usado VARCHAR(100),
+    numero_logins INT DEFAULT 0,
+    FOREIGN KEY (id_sistema) REFERENCES funcionarios(id_sistema) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

@@ -1,0 +1,19 @@
+CREATE TABLE IF NOT EXISTS perdas (
+    id_perda INT AUTO_INCREMENT PRIMARY KEY,
+    id_produto INT NOT NULL,
+    -- Alterado para VARCHAR(20) para casar com o id_funcionario do PHP
+    id_funcionario_responsavel VARCHAR(20) NOT NULL, 
+    quantidade INT NOT NULL,
+    motivo ENUM('Validade Vencida', 'Quebra/Avaria', 'Furto/Roubo', 'Uso Interno', 'Erro de Contagem') NOT NULL,
+    observacao TEXT NOT NULL,
+    preco_custo_unidade DECIMAL(10,2) NOT NULL,
+    valor_prejuizo_total DECIMAL(10,2) NOT NULL,
+    data_registro DATETIME DEFAULT CURRENT_TIMESTAMP,
+    
+    -- Chave Estrangeira apontando para id_funcionario (o código VARCHAR)
+    CONSTRAINT fk_perda_produto FOREIGN KEY (id_produto) 
+        REFERENCES produtos(id_produto) ON DELETE CASCADE,
+    
+    CONSTRAINT fk_perda_funcionario_cod FOREIGN KEY (id_funcionario_responsavel) 
+        REFERENCES funcionarios(id_funcionario) ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

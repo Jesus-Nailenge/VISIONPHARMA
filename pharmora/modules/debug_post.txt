@@ -1,0 +1,20 @@
+Array
+(
+    [id_sistema] => 
+    [nome_completo] => Administrador 
+    [documento_id] => 1234567890ks322
+    [telefone] => 93956816
+    [data_nascimento] => 2026-01-26
+    [sexo] => Masculino
+    [email] => adm@adm
+    [morada] => 
+    [cargo] => Administrador de TI
+    [tipo_contrato] => Efetivo
+    [departamento] => Geral
+    [filial] => Sede Principal
+    [estado_trabalho] => Ativo
+    [permitir_login] => 1
+    [username] => admin
+    [password] => 888
+    [nivel_acesso] => Admin
+)

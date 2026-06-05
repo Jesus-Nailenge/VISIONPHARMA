@@ -1,0 +1,38 @@
+CREATE TABLE IF NOT EXISTS produtos (
+    id_produto INT AUTO_INCREMENT PRIMARY KEY,
+    codigo_barra VARCHAR(50) UNIQUE,
+    nome_produto VARCHAR(150) NOT NULL,
+    principio_ativo VARCHAR(150),
+    categoria VARCHAR(50),               -- Medicamento, Higiene, Infantil, etc.
+    tipo_apresentacao VARCHAR(50),       -- Ex: Caixa, Frasco, Pacote, Blister
+    dosagem_peso VARCHAR(50),            -- Ex: 500mg, 100ml
+    lote VARCHAR(50),
+    data_validade DATE,
+    
+    -- --- FINANCEIRO E IMPOSTOS ---
+    preco_compra DECIMAL(10,2) NOT NULL,
+    taxa_iva DECIMAL(5,2) DEFAULT 0.00,
+    
+    -- --- LÓGICA DE VENDA (GROSSO vs RETALHO) ---
+    permite_retalho TINYINT(1) DEFAULT 0,     -- 0: Não, 1: Sim (pode abrir a caixa)
+    unidades_por_caixa INT DEFAULT 1,         -- Ex: 30 comprimidos na caixa
+    preco_venda_caixa DECIMAL(10,2) NOT NULL, -- Preço da embalagem fechada
+    preco_venda_unidade DECIMAL(10,2),        -- Preço de 1 unidade/comprimido
+	preco_promocional DECIMAL(10,2) DEFAULT 0.00,
+    
+    -- --- CONTROLE DE ESTOQUE --- 
+	estoque_atual_caixas DECIMAL(10,3) DEFAULT 0.000,
+	estoque_minimo_caixas DECIMAL(10,3) DEFAULT 5.000,
+    
+    -- --- ATRIBUTOS LOGÍSTICOS E SAÚDE ---
+    fornecedor VARCHAR(100),
+    localizacao_corredor VARCHAR(50),
+    requer_receita TINYINT(1) DEFAULT 0,      -- 0: Livre, 1: Obrigatória
+    refrigerado TINYINT(1) DEFAULT 0,         -- 0: Não, 1: Sim (Geladeira)
+    
+    -- --- METADADOS ---
+    foto_produto VARCHAR(255) DEFAULT 'produto_default.png',
+    status_item ENUM('Ativo', 'Inativo', 'Vencido', 'Esgotado') DEFAULT 'Ativo',
+    data_cadastro TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    ultima_atualizacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

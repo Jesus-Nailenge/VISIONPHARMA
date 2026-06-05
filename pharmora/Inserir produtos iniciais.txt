@@ -1,0 +1,33 @@
+INSERT INTO produtos (
+    codigo_barra, nome_produto, principio_ativo, categoria, tipo_apresentacao, 
+    dosagem_peso, lote, data_validade, preco_compra, taxa_iva, permite_retalho, 
+    unidades_por_caixa, preco_venda_caixa, preco_venda_unidade, preco_promocional, 
+    estoque_atual_caixas, estoque_minimo_caixas, fornecedor, localizacao_corredor, 
+    requer_receita, refrigerado, status_item
+) VALUES 
+-- MEDICAMENTOS (COM E SEM RETALHO)
+('7891001', 'Paracetamol 500mg', 'Paracetamol', 'Medicamento', 'Caixa', '500mg', 'L2024-01', '2026-12-30', 1200.00, 14.00, 1, 20, 2500.00, 150.00, 0.00, 50, 10, 'AngoFarma', 'Corredor A1', 0, 0, 'Ativo'),
+('7891002', 'Amoxicilina + Clavulanato', 'Amoxicilina', 'Medicamento', 'Caixa', '875mg', 'L2024-05', '2025-08-15', 3500.00, 14.00, 0, 14, 6800.00, NULL, 6500.00, 25, 5, 'BioSaúde', 'Corredor A2', 1, 0, 'Ativo'),
+('7891003', 'Insulina NPH', 'Insulina Humana', 'Medicamento', 'Frasco', '100 UI/ml', 'INS-99', '2025-04-20', 4500.00, 7.00, 0, 1, 8900.00, NULL, 0.00, 15, 3, 'AngoFarma', 'Geladeira 01', 1, 1, 'Ativo'),
+('7891004', 'Diclofenac Sódico', 'Diclofenac', 'Medicamento', 'Blister', '50mg', 'L-554', '2026-01-10', 800.00, 14.00, 1, 10, 1800.00, 200.00, 0.00, 100, 20, 'FarmaLeste', 'Corredor A1', 0, 0, 'Ativo'),
+('7891005', 'Omeprazol 20mg', 'Omeprazol', 'Medicamento', 'Caixa', '20mg', 'OMP-12', '2027-03-22', 1500.00, 14.00, 1, 28, 3200.00, 120.00, 3000.00, 40, 10, 'BioSaúde', 'Corredor A2', 0, 0, 'Ativo'),
+
+-- HIGIENE E CUIDADO PESSOAL
+('7892001', 'Pasta de Dente Sorriso', NULL, 'Higiene', 'Tubo', '90g', 'H-101', '2026-06-15', 400.00, 14.00, 0, 1, 950.00, NULL, 850.00, 60, 15, 'Distribuidora Global', 'Corredor B1', 0, 0, 'Ativo'),
+('7892002', 'Fio Dental 50m', NULL, 'Higiene', 'Unidade', '50m', 'H-202', '2028-10-01', 350.00, 14.00, 0, 1, 800.00, NULL, 0.00, 30, 5, 'Distribuidora Global', 'Corredor B1', 0, 0, 'Ativo'),
+('7892003', 'Sabonete Líquido Protex', NULL, 'Higiene', 'Frasco', '250ml', 'H-303', '2026-11-20', 900.00, 14.00, 0, 1, 2100.00, NULL, 1950.00, 20, 5, 'UniLev', 'Corredor B2', 0, 0, 'Ativo'),
+('7892004', 'Álcool em Gel 70%', 'Álcool Etílico', 'Higiene', 'Frasco', '500ml', 'ALC-22', '2025-12-01', 600.00, 14.00, 0, 1, 1500.00, NULL, 0.00, 80, 10, 'QuimiSul', 'Corredor B2', 0, 0, 'Ativo'),
+
+-- INFANTIL
+('7893001', 'Fralda Pampers G', NULL, 'Infantil', 'Pacote', '32 un', 'FR-88', '2027-05-10', 4800.00, 14.00, 0, 1, 9500.00, NULL, 8900.00, 15, 5, 'P&G Angola', 'Corredor C1', 0, 0, 'Ativo'),
+('7893002', 'Leite Aptamil 1', NULL, 'Infantil', 'Lata', '400g', 'LT-44', '2025-02-28', 5200.00, 7.00, 0, 1, 12000.00, NULL, 0.00, 12, 4, 'Danone Nutri', 'Corredor C2', 0, 0, 'Ativo'),
+('7893003', 'Chupeta Avent 0-6m', NULL, 'Infantil', 'Unidade', 'Tamanho 1', 'CH-01', NULL, 1800.00, 14.00, 0, 1, 4500.00, NULL, 0.00, 10, 2, 'P&G Angola', 'Corredor C1', 0, 0, 'Ativo'),
+
+-- SUPLEMENTOS E OUTROS
+('7894001', 'Vitamina C Cenevit', 'Ácido Ascórbico', 'Suplemento', 'Tubo', '1g', 'VIT-01', '2026-09-12', 1100.00, 7.00, 0, 10, 2800.00, NULL, 2500.00, 45, 10, 'FarmaLeste', 'Corredor D1', 0, 0, 'Ativo'),
+('7894002', 'Centrum Mulher', 'Multivitamínico', 'Suplemento', 'Frasco', '30 comp', 'VIT-02', '2026-01-30', 4200.00, 7.00, 0, 1, 9800.00, NULL, 0.00, 20, 5, 'FarmaLeste', 'Corredor D1', 0, 0, 'Ativo'),
+('7895001', 'Soro Fisiológico 0,9%', 'Cloreto de Sódio', 'Medicamento', 'Frasco', '500ml', 'SOR-10', '2027-07-15', 450.00, 14.00, 0, 1, 1200.00, NULL, 0.00, 100, 20, 'QuimiSul', 'Corredor A3', 0, 0, 'Ativo'),
+
+-- PRODUTOS VENCIDOS OU ESGOTADOS (Para teste de sistema)
+('7899001', 'Xarope para Tosse Exp.', 'Ambroxol', 'Medicamento', 'Frasco', '120ml', 'XAR-44', '2023-01-01', 900.00, 14.00, 0, 1, 2200.00, NULL, 0.00, 5, 5, 'BioSaúde', 'Corredor A2', 0, 0, 'Vencido'),
+('7899002', 'Luvas de Látex M', NULL, 'Outros', 'Caixa', '100 un', 'LUV-01', '2028-12-01', 2500.00, 14.00, 1, 100, 5500.00, 60.00, 0.00, 0, 10, 'Distribuidora Global', 'Depósito', 0, 0, 'Esgotado');

@@ -1,0 +1,113 @@
+/* ================== Geral e Reset ================== */
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'Nunito', sans-serif;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    -khtml-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+}
+
+/* ============ MODAL DE CONFIRMAÇÃO GLOBAL ============ */
+.modal-confirm-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.85);
+    backdrop-filter: blur(10px);
+    z-index: 10000; /* Acima de tudo */
+    display: none;
+    justify-content: center;
+    align-items: center;
+    padding: 20px;
+}
+
+.modal-confirm-overlay.active {
+    display: flex !important;
+}
+
+.modal-confirm-box {
+    width: 100%;
+    max-width: 400px;
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 20px;
+    padding: 30px;
+    text-align: center;
+    animation: modalPop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+}
+
+.modal-confirm-icon {
+    width: 60px;
+    height: 60px;
+    background: rgba(243, 156, 18, 0.1);
+    color: #f39c12;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    margin: 0 auto 20px;
+    border: 1px solid rgba(243, 156, 18, 0.2);
+}
+
+.modal-confirm-box h3 {
+    color: var(--text-main);
+    margin-bottom: 10px;
+    font-size: 18px;
+}
+
+.modal-confirm-box p {
+    color: var(--text-dim);
+    font-size: 14px;
+    line-height: 1.5;
+    margin-bottom: 25px;
+}
+
+.modal-confirm-buttons {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+
+.btn-confirm-cancel {
+    padding: 12px;
+    border-radius: 12px;
+    border: 1px solid var(--card-border);
+    background: var(--input-fill);
+    color: var(--text-main);
+    cursor: pointer;
+    font-weight: 600;
+    transition: 0.3s;
+}
+
+.btn-confirm-cancel:hover {
+    background: rgba(255,255,255,0.1);
+}
+
+.btn-confirm-action {
+    padding: 12px;
+    border-radius: 12px;
+    border: none;
+    background: #e74c3c; /* Vermelho para ações destrutivas */
+    color: white;
+    cursor: pointer;
+    font-weight: 700;
+    transition: 0.3s;
+}
+
+.btn-confirm-action:hover {
+    background: #c0392b;
+    transform: translateY(-2px);
+}
+
+@keyframes modalPop {
+    from { opacity: 0; transform: scale(0.9); }
+    to { opacity: 1; transform: scale(1); }
+}

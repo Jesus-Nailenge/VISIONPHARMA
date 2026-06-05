@@ -1,0 +1,64 @@
+-- =========================================================================
+-- PHARMORA - ESTRUTURA COMPLETA DO MÓDULO DE GESTÃO FINANCEIRA
+-- =========================================================================
+
+-- 1. TABELA CENTRAL DE MOVIMENTAÇÕES (FLUXO DE CAIXA REAL)
+-- Registra toda e qualquer entrada ou saída física de dinheiro na farmácia.
+CREATE TABLE IF NOT EXISTS financeiro_movimentacoes (
+    id_financeiro INT AUTO_INCREMENT PRIMARY KEY,
+    tipo ENUM('RECEITA', 'DESPESA', 'PERDA') NOT NULL, 
+    origem ENUM('VENDA', 'PERDA_ESTOQUE', 'COMPRA_PRODUTOS', 'PAGAMENTO_FUNCIONARIOS', 'CONTAS_A_PAGAR', 'AJUSTE_CAIXA') NOT NULL,
+    id_referencia INT DEFAULT NULL, -- Guarda o ID da Venda, ID do Pagamento ou ID da Perda para rastreamento
+    valor_bruto DECIMAL(15,2) NOT NULL DEFAULT 0.00,
+    desconto DECIMAL(15,2) NOT NULL DEFAULT 0.00, -- Registra o desconto concedido de forma isolada
+    acrescimo DECIMAL(15,2) NOT NULL DEFAULT 0.00,
+    valor_liquido DECIMAL(15,2) NOT NULL DEFAULT 0.00, -- O valor real que alterou o caixa (Kz)
+    metodo_pagamento VARCHAR(50) DEFAULT 'dinheiro', -- dinheiro, mpesa, emola, pos, misto
+    id_operador INT NOT NULL, -- Quem realizou a operação (Ligado ao id_sistema do usuário)
+    data_registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    descricao TEXT DEFAULT NULL,
+    INDEX idx_tipo_origem (tipo, origem),
+    INDEX idx_data (data_registro)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- 2. TABELA DE HISTÓRICO DE PAGAMENTO DE FUNCIONÁRIOS
+-- Centraliza as folhas de pagamento, registrando salários, bônus e deduções.
+CREATE TABLE IF NOT EXISTS financeiro_pagamentos_funcionarios (
+    id_pagamento INT AUTO_INCREMENT PRIMARY KEY,
+    id_funcionario INT NOT NULL, -- Referência ao id_sistema da tabela funcionarios
+    mes_referencia TINYINT NOT NULL, -- Ex: 1 para Janeiro, 5 para Maio
+    ano_referencia INT NOT NULL, -- Ex: 2026
+    salario_base DECIMAL(15,2) NOT NULL DEFAULT 0.00,
+    subsidios_bonus DECIMAL(15,2) NOT NULL DEFAULT 0.00, -- Acréscimos (Alimentação, transporte, performance)
+    descontos_faltas DECIMAL(15,2) NOT NULL DEFAULT 0.00, -- Deduções por faltas ou atrasos
+    descontos_impostos DECIMAL(15,2) NOT NULL DEFAULT 0.00, -- Retenções (Segurança Social / INSS / IRT)
+    valor_pago_liquido DECIMAL(15,2) NOT NULL DEFAULT 0.00, -- O que o funcionário realmente recebeu
+    data_pagamento DATETIME NOT NULL,
+    forma_pagamento VARCHAR(50) DEFAULT 'Transferência Bancária',
+    id_operador INT NOT NULL, -- Administrador que autorizou o pagamento
+    status_pagamento ENUM('PAGO', 'AGUARDANDO_FUNDOS', 'CANCELADO') DEFAULT 'PAGO',
+    observacoes TEXT DEFAULT NULL,
+    FOREIGN KEY (id_funcionario) REFERENCES funcionarios(id_sistema) ON DELETE RESTRICT,
+    INDEX idx_periodo (ano_referencia, mes_referencia)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- 3. TABELA DE CONTAS A PAGAR (CUSTOS PREVISTOS / PROVADOS)
+-- Gerencia as contas futuras da farmácia (Fornecedores de medicamentos, Água, Luz, Renda, etc.)
+CREATE TABLE IF NOT EXISTS financeiro_contas_pagar (
+    id_conta INT AUTO_INCREMENT PRIMARY KEY,
+    descricao VARCHAR(255) NOT NULL,
+    categoria ENUM('FORNECEDOR', 'INFRAESTRUTURA', 'IMPOSTOS', 'MARKETING', 'OUTROS') DEFAULT 'FORNECEDOR',
+    id_referencia_fornecedor INT DEFAULT NULL, -- Se for custo de fornecedor, pode amarrar ao ID dele
+    valor_original DECIMAL(15,2) NOT NULL DEFAULT 0.00,
+    data_vencimento DATE NOT NULL,
+    data_pagamento DATE DEFAULT NULL,
+    valor_pago DECIMAL(15,2) DEFAULT 0.00,
+    status_conta ENUM('PENDENTE', 'PAGO_PARCIAL', 'PAGO', 'VENCIDO', 'CANCELADO') DEFAULT 'PENDENTE',
+    id_operador_cadastro INT NOT NULL,
+    id_operador_baixa INT DEFAULT NULL,
+    data_cadastro TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_vencimento (data_vencimento),
+    INDEX idx_status (status_conta)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

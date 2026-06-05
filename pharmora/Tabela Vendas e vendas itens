@@ -1,0 +1,38 @@
+-- Desativa a verificação de chaves temporariamente para poder apagar sem erros
+SET FOREIGN_KEY_CHECKS = 0;
+
+DROP TABLE IF EXISTS vendas_itens;
+DROP TABLE IF EXISTS vendas;
+
+SET FOREIGN_KEY_CHECKS = 1;
+
+-- Agora cria a estrutura correta e completa (Sem a coluna valor_troco)
+CREATE TABLE vendas (
+    id_venda INT AUTO_INCREMENT PRIMARY KEY,
+    data_venda TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    nome_cliente VARCHAR(100) DEFAULT 'Consumidor Final', 
+    id_usuario INT, 
+    total_produtos DECIMAL(10,2) NOT NULL,
+    desconto_venda DECIMAL(10,2) DEFAULT 0.00,
+    acrescimo_venda DECIMAL(10,2) DEFAULT 0.00,
+    total_final DECIMAL(10,2) NOT NULL,
+    forma_pagamento ENUM('Dinheiro', 'M-Pesa', 'E-Mola', 'POS', 'Misto') NOT NULL,
+    valor_recebido DECIMAL(10,2) DEFAULT 0.00, -- Mantido (Valor Entregue)
+    status_venda ENUM('Concluida', 'Cancelada', 'Devolvida') DEFAULT 'Concluida',
+    INDEX (data_venda),
+    CONSTRAINT fk_vendedor_venda FOREIGN KEY (id_usuario) REFERENCES funcionarios(id_sistema) ON DELETE SET NULL
+) ENGINE=InnoDB;
+
+CREATE TABLE vendas_itens (
+    id_item INT AUTO_INCREMENT PRIMARY KEY,
+    venda_id INT NOT NULL,
+    produto_id INT NOT NULL,
+    qtd INT NOT NULL,
+    preco_unitario DECIMAL(10,2) NOT NULL,
+    subtotal DECIMAL(10,2) NOT NULL,
+    modo_venda VARCHAR(20) DEFAULT 'caixa',
+    CONSTRAINT fk_venda_pai FOREIGN KEY (venda_id) REFERENCES vendas(id_venda) ON DELETE CASCADE,
+    CONSTRAINT fk_produto_venda FOREIGN KEY (produto_id) REFERENCES produtos(id_produto)
+) ENGINE=InnoDB;
+
+CREATE INDEX idx_venda_relacionada ON vendas_itens(venda_id);

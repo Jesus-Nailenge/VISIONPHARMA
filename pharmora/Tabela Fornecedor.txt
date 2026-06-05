@@ -1,0 +1,23 @@
+-- 1. CRIAR A TABELA DE FORNECEDORES (Apenas o essencial e o que sua tela usa)
+CREATE TABLE IF NOT EXISTS fornecedores (
+    id_fornecedor INT AUTO_INCREMENT PRIMARY KEY,
+    nome VARCHAR(150) NOT NULL,
+    nif VARCHAR(50) NOT NULL UNIQUE,          
+    telefone VARCHAR(50),
+    email VARCHAR(100),
+    endereco TEXT,
+    categoria VARCHAR(50) DEFAULT 'Geral',    
+    condicoes_pagamento VARCHAR(100),         
+    status_fornecedor ENUM('Ativo', 'Inativo') DEFAULT 'Ativo',
+    avaliacao_global INT DEFAULT 4,           -- Controla as estrelas na tela (1 a 5)
+    desempenho_entrega INT DEFAULT 98,        -- Porcentagem de sucesso (Ex: 98%)
+    data_cadastro TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    ultima_atualizacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 2. MODIFICAR A TABELA DE PRODUTOS
+-- Removemos o campo antigo de texto e adicionamos a chave estrangeira (FK)
+ALTER TABLE produtos DROP COLUMN fornecedor;
+ALTER TABLE produtos ADD COLUMN id_fornecedor INT AFTER estoque_minimo_caixas;
+ALTER TABLE produtos ADD CONSTRAINT fk_produtos_fornecedor 
+    FOREIGN KEY (id_fornecedor) REFERENCES fornecedores(id_fornecedor) ON DELETE SET NULL;
