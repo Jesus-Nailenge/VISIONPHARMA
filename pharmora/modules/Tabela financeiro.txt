@@ -62,3 +62,248 @@ CREATE TABLE IF NOT EXISTS financeiro_contas_pagar (
     INDEX idx_vencimento (data_vencimento),
     INDEX idx_status (status_conta)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+________________
+
+
+_____
+
+<?php
+
+class PharmoraFinanceiro {
+    private $pdo;
+
+    public function __construct(PDO $pdo) {
+        $this->pdo = $pdo;
+    }
+
+    // =========================================================================
+    // 1. SISTEMA DE AUDITORIA
+    // =========================================================================
+    
+    /**
+     * Registra uma ação crítica no sistema para fins de auditoria.
+     */
+    public function registrarLogAuditoria(int $idUsuario, string $acao, string $tabela, ?int $idRegistro, string $detalhes): bool {
+        $sql = "INSERT INTO auditoria_sistema (id_usuario, acao, tabela_afetada, id_registro_afetado, detalhes, ip_endereco) 
+                VALUES (:id_usuario, :acao, :tabela, :id_registro, :detalhes, :ip)";
+        
+        $stmt = $this->pdo->prepare($sql);
+        return $stmt->execute([
+            ':id_usuario'  => $idUsuario,
+            ':acao'        => strtoupper($acao),
+            ':tabela'      => $tabela,
+            ':id_registro' => $idRegistro,
+            ':detalhes'    => $detalhes,
+            ':ip'          => $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1'
+        ]);
+    }
+
+    /**
+     * Recupera o histórico de auditoria com filtro opcional por usuário.
+     */
+    public function obterLogsAuditoria(?int $idUsuario = null, int $limite = 100): array {
+        $sql = "SELECT a.*, f.id_funcionario FROM auditoria_sistema a 
+                LEFT JOIN financeiro_pagamentos_funcionarios f ON a.id_usuario = f.id_funcionario ";
+        
+        if ($idUsuario) {
+            $sql .= "WHERE a.id_usuario = :id_usuario ";
+        }
+        $sql .= "ORDER BY a.data_evento DESC LIMIT :limite";
+
+        $stmt = $this->pdo->prepare($sql);
+        if ($idUsuario) {
+            $stmt->bindValue(':id_usuario', $idUsuario, PDO::PARAM_INT);
+        }
+        $stmt->bindValue(':limite', $limite, PDO::PARAM_INT);
+        $stmt->execute();
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+
+    // =========================================================================
+    // 2. HISTÓRICO DE VENDAS (FLUXO DE CAIXA)
+    // =========================================================================
+    
+    /**
+     * Retorna o histórico de vendas cruzando os dados reais do fluxo de caixa.
+     */
+    public function obterHistoricoVendas(string $dataInicio, string $dataFim): array {
+        $sql = "SELECT id_financeiro, id_referencia AS id_venda, valor_bruto, desconto, acrescimo, 
+                       valor_liquido, metodo_pagamento, id_operador, data_registro, descricao
+                FROM financeiro_movimentacoes 
+                WHERE tipo = 'RECEITA' AND origem = 'VENDA' 
+                AND data_registro BETWEEN :inicio AND :fim
+                ORDER BY data_registro DESC";
+
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute([
+            ':inicio' => $dataInicio . ' 00:00:00',
+            ':fim'    => $dataFim . ' 23:59:59'
+        ]);
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+
+    // =========================================================================
+    // 3. GESTÃO DE CONTAS A PAGAR
+    // =========================================================================
+    
+    /**
+     * Lista as contas cadastradas com base no status (PENDENTE, PAGO, VENCIDO, etc).
+     */
+    public function listarContasAPagar(?string $status = null): array {
+        $sql = "SELECT * FROM financeiro_contas_pagar ";
+        if ($status) {
+            $sql .= "WHERE status_conta = :status ";
+        }
+        $sql .= "ORDER BY data_vencimento ASC";
+
+        $stmt = $this->pdo->prepare($sql);
+        if ($status) {
+            $stmt->bindValue(':status', strtoupper($status), PDO::PARAM_STR);
+        }
+        $stmt->execute();
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Efetua a baixa (pagamento) de uma conta e gera automaticamente a movimentação de saída.
+     */
+    public function pagarConta(int $idConta, float $valorPago, int $idOperador, string $metodoPagamento = 'Transferência Bancária'): bool {
+        try {
+            $this->pdo->beginTransaction();
+
+            // 1. Buscar dados da conta para validação
+            $stmt = $this->pdo->prepare("SELECT * FROM financeiro_contas_pagar WHERE id_conta = ? FOR UPDATE");
+            $stmt->execute([$idConta]);
+            $conta = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$conta || $conta['status_conta'] === 'PAGO') {
+                throw new Exception("Conta inválida ou já liquidada.");
+            }
+
+            // 2. Atualizar a tabela de Contas a Pagar
+            $sqlAtualizaConta = "UPDATE financeiro_contas_pagar 
+                                 SET status_conta = 'PAGO', data_pagamento = CURDATE(), valor_pago = :valor_pago, id_operador_baixa = :operador 
+                                 WHERE id_conta = :id_conta";
+            $stmtUpdate = $this->pdo->prepare($sqlAtualizaConta);
+            $stmtUpdate->execute([
+                ':valor_pago' => $valorPago,
+                ':operador'   => $idOperador,
+                ':id_conta'   => $idConta
+            ]);
+
+            // 3. Lançar a saída física de dinheiro na tabela central de movimentações
+            $sqlMovimentacao = "INSERT INTO financeiro_movimentacoes 
+                                (tipo, origem, id_referencia, valor_bruto, valor_liquido, metodo_pagamento, id_operador, descricao) 
+                                VALUES ('DESPESA', 'CONTAS_A_PAGAR', :id_ref, :valor, :valor, :metodo, :operador, :descricao)";
+            $stmtMov = $this->pdo->prepare($sqlMovimentacao);
+            $stmtMov->execute([
+                ':id_ref'    => $idConta,
+                ':valor'     => $valorPago,
+                ':metodo'    => $metodoPagamento,
+                ':operador'  => $idOperador,
+                ':descricao' => "Liquidação da conta: " . $conta['descricao']
+            ]);
+
+            // 4. Registrar na Auditoria
+            $this->registrarLogAuditoria(
+                $idOperador, 
+                'BAIXA_CONTA', 
+                'financeiro_contas_pagar', 
+                $idConta, 
+                "Conta '{$conta['descricao']}' paga no valor de Kz $valorPago"
+            );
+
+            $this->pdo->commit();
+            return true;
+
+        } catch (Exception $e) {
+            $this->pdo->rollBack();
+            error_log("Erro ao pagar conta: " . $e->getMessage());
+            return false;
+        }
+    }
+
+
+    // =========================================================================
+    // 4. GESTÃO DE PERDAS DE ESTOQUE
+    // =========================================================================
+    
+    /**
+     * Registra a perda de um produto, detalha o motivo e abate o valor no fluxo financeiro.
+     */
+    public function registrarPerdaEstoque(int $idProduto, int $quantidade, string $motivo, float $valorPrejuizoTotal, int $idOperador): bool {
+        try {
+            $this->pdo->beginTransaction();
+
+            // 1. Inserir o detalhe na tabela de perdas
+            $sqlPerda = "INSERT INTO produtos_perdas (id_produto, quantidade, motivo, valor_prejuizo, id_operador) 
+                         VALUES (:id_produto, :qtd, :motivo, :prejuizo, :operador)";
+            $stmtPerda = $this->pdo->prepare($sqlPerda);
+            $stmtPerda->execute([
+                ':id_produto' => $idProduto,
+                ':qtd'        => $quantidade,
+                ':motivo'     => $motivo,
+                ':prejuizo'   => $valorPrejuizoTotal,
+                ':operador'   => $idOperador
+            ]);
+            
+            $idPerdaGerada = $this->pdo->lastInsertId();
+
+            // 2. Lançar o impacto negativo na tabela de movimentações financeiras
+            $sqlMovimentacao = "INSERT INTO financeiro_movimentacoes 
+                                (tipo, origem, id_referencia, valor_bruto, valor_liquido, id_operador, descricao) 
+                                VALUES ('PERDA', 'PERDA_ESTOQUE', :id_ref, :valor, :valor, :operador, :descricao)";
+            $stmtMov = $this->pdo->prepare($sqlMovimentacao);
+            $stmtMov->execute([
+                ':id_ref'    => $idPerdaGerada,
+                ':valor'     => $valorPrejuizoTotal,
+                ':operador'  => $idOperador,
+                ':descricao' => "Perda de Estoque - Qtd: $quantidade | Motivo: $motivo"
+            ]);
+
+            // 3. Auditar a ação
+            $this->registrarLogAuditoria(
+                $idOperador, 
+                'REGISTRO_PERDA', 
+                'produtos_perdas', 
+                $idPerdaGerada, 
+                "Produto ID $idProduto. Qtd: $quantidade. Prejuízo avaliado em Kz $valorPrejuizoTotal"
+            );
+
+            $this->pdo->commit();
+            return true;
+
+        } catch (Exception $e) {
+            $this->pdo->rollBack();
+            error_log("Erro ao registrar perda: " . $e->getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Retorna o relatório completo de perdas registradas em um período.
+     */
+    public function obterHistoricoPerdas(string $dataInicio, string $dataFim): array {
+        $sql = "SELECT p.*, m.valor_liquido 
+                FROM produtos_perdas p
+                INNER JOIN financeiro_movimentacoes m ON p.id_perda = m.id_referencia 
+                WHERE m.origem = 'PERDA_ESTOQUE' 
+                AND p.data_registro BETWEEN :inicio AND :fim
+                ORDER BY p.data_registro DESC";
+
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute([
+            ':inicio' => $dataInicio . ' 00:00:00',
+            ':fim'    => $dataFim . ' 23:59:59'
+        ]);
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+}
