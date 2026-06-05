@@ -27,12 +27,10 @@ class PharmoraRelatorios {
 
         $dados = $stmt->fetch(PDO::FETCH_ASSOC);
         
-        // Garantir que valores nulos retornem 0
         $receitas = $dados['total_receitas'] ?? 0.00;
         $despesas = $dados['total_despesas'] ?? 0.00;
         $perdas = $dados['total_perdas'] ?? 0.00;
         
-        // Cálculo do Lucro Líquido Real
         $lucroLiquido = $receitas - ($despesas + $perdas);
 
         return [
@@ -45,7 +43,7 @@ class PharmoraRelatorios {
 
     /**
      * 2. FATURAMENTO POR MÉTODO DE PAGAMENTO
-     * Identifica quais canais de entrada trazem mais dinheiro (Dinheiro, POS, M-Pesa, E-mola, etc.)
+     * Identifica quais canais de entrada trazem mais dinheiro.
      */
     public function obterFaturamentoPorMetodo(string $dataInicio, string $dataFim): array {
         $sql = "SELECT metodo_pagamento, 
@@ -68,7 +66,7 @@ class PharmoraRelatorios {
 
     /**
      * 3. DIAGNÓSTICO DE CONTAS A PAGAR
-     * Agrupa as contas por status para entender o endividamento e compromissos futuros.
+     * Agrupa as contas por status para entender o endividamento.
      */
     public function obterResumoContasAPagar(): array {
         $sql = "SELECT status_conta,
@@ -85,15 +83,16 @@ class PharmoraRelatorios {
     }
 
     /**
-     * 4. RANKING E ANÁLISE DE PERDAS DE ESTOQUE
-     * Mapeia os principais motivos de prejuízo na farmácia (Ex: Validade, Quebra).
+     * 4. RANKING E ANÁLISE DE PERDAS DE ESTOQUE (ATUALIZADO)
+     * Ajustado para ler a tabela 'perdas' e a coluna 'valor_prejuizo_total'
      */
     public function obterResumoPerdas(string $dataInicio, string $dataFim): array {
+        // CORREÇÃO: Tabela mudou para 'perdas' e coluna para 'valor_prejuizo_total'
         $sql = "SELECT motivo,
                        COUNT(*) AS total_ocorrencias,
                        SUM(quantidade) AS produtos_perdidos,
-                       SUM(valor_prejuizo) AS prejuizo_financeiro
-                FROM produtos_perdas
+                       SUM(valor_prejuizo_total) AS prejuizo_financeiro
+                FROM perdas
                 WHERE data_registro BETWEEN :inicio AND :fim
                 GROUP BY motivo
                 ORDER BY prejuizo_financeiro DESC";
@@ -109,7 +108,7 @@ class PharmoraRelatorios {
 
     /**
      * 5. EVOLUÇÃO DOS CUSTOS DE PESSOAL (FOLHA DE PAGAMENTO)
-     * Consolida os gastos reais com funcionários por competência (Mês/Ano).
+     * Consolida os gastos reais com funcionários.
      */
     public function obterCustosComPessoal(int $ano): array {
         $sql = "SELECT mes_referencia,
