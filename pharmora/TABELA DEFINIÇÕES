@@ -1,0 +1,19 @@
+CREATE TABLE IF NOT EXISTS sistema_definicoes (
+    id_config INT AUTO_INCREMENT PRIMARY KEY,
+    chave VARCHAR(50) UNIQUE NOT NULL,
+    valor TEXT NULL,
+    categoria VARCHAR(50) DEFAULT 'Geral',
+    descricao VARCHAR(255)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Inserção dos parâmetros padrão do sistema
+INSERT INTO sistema_definicoes (chave, valor, categoria, descricao) VALUES
+('nome_empresa', 'VisionPharma Lda', 'Geral', 'Nome oficial da farmácia'),
+('nif_empresa', '5000123456', 'Geral', 'Número de Identificação Fiscal'),
+('telefone_empresa', '+244 923 000 000', 'Geral', 'Telefone de contacto principal'),
+('email_empresa', 'geral@visionpharma.com', 'Geral', 'E-mail corporativo'),
+('endereco_empresa', 'Av. Revolução de Outubro, Luanda, Angola', 'Geral', 'Endereço físico da sede'),
+('moeda_padrao', 'Kz', 'Financeiro', 'Símbolo monetário do sistema'),
+('iva_padrao', '14.00', 'Financeiro', 'Taxa de IVA padrão aplicada aos produtos (%)'),
+('limite_alerta_estoque', '10', 'Logística', 'Quantidade mínima global para ativação de alertas de estoque baixo')
+ON DUPLICATE KEY UPDATE chave=chave;
