@@ -1,448 +1,329 @@
-<?php
-/**
- * VISIONPHARMA - Painel Principal (Módulo Interno)
- * Injetado dinamicamente via AJAX no viewport principal.
- */
-
-if (session_status() === PHP_SESSION_NONE) { 
-    session_start(); 
-}
-
-// 1. INCLUSÃO DA CONEXÃO DO SISTEMA
-require_once("../config_api.php");
-
-if (!$conn) {
-    echo "<div style='color:#ff4444; padding:20px; text-align:center;'>Falha na ligação com a base de dados.</div>";
-    exit;
-}
-
-// 2. CONTROLO SEGURO DE SESSÃO DO OPERADOR
-$id_sistema_logado = $_SESSION['id_sistema'] ?? $_SESSION['id_usuario'] ?? null;
-
-if (!$id_sistema_logado) {
-    echo "<div style='color: #ff4444; padding: 20px; text-align: center; font-size: 14px;'>
-            <i class='fas fa-ban'></i> Sessão expirada. Por favor, reautentique-se no sistema.
-          </div>";
-    exit;
-}
-
-// 3. CAPTURA EM TEMPO REAL DOS PRIVILÉGIOS PARA MAPEAMENTO DE SEGURANÇA
-$sql_user = "SELECT u.nivel_acesso, u.permissoes_especiais 
-             FROM usuarios u
-             WHERE u.id_sistema = ? AND u.estado_conta = 'Ativa'";
-             
-$stmt_user = $conn->prepare($sql_user);
-$stmt_user->bind_param("i", $id_sistema_logado);
-$stmt_user->execute();
-$res_user = $stmt_user->get_result();
-
-if ($res_user && $res_user->num_rows > 0) {
-    $dados_usuario = $res_user->fetch_assoc();
-} else {
-    echo "<div style='color: #ff4444; padding: 20px; text-align: center;'>Utilizador inválido ou suspenso.</div>";
-    exit;
-}
-$stmt_user->close();
-
-// 4. DESCOMPRESSÃO DA MATRIZ DE PERMISSÕES (JSON)
-$e_admin = (strcasecmp($dados_usuario['nivel_acesso'], 'Admin') === 0);
-$permissoes_json = json_decode($dados_usuario['permissoes_especiais'], true) ?? [];
-
-$p = [
-    "ver_dashboard"    => $e_admin ? 1 : ($permissoes_json['ver_dashboard'] ?? 0),
-    "ver_vendas"       => $e_admin ? 1 : ($permissoes_json['ver_vendas'] ?? 0),
-    "ver_perdas"       => $e_admin ? 1 : ($permissoes_json['ver_perdas'] ?? 0),
-    "ver_estoque"      => $e_admin ? 1 : ($permissoes_json['ver_estoque'] ?? 0),
-    "ver_fornecedores" => $e_admin ? 1 : ($permissoes_json['ver_fornecedores'] ?? 0),
-    "gerir_usuarios"   => $e_admin ? 1 : ($permissoes_json['gerir_usuarios'] ?? 0),
-    "ver_financeiro"   => $e_admin ? 1 : ($permissoes_json['ver_financeiro'] ?? 0),
-    "ver_logs"         => $e_admin ? 1 : ($permissoes_json['ver_logs'] ?? 0),
-    "ver_relatorios"   => $e_admin ? 1 : ($permissoes_json['ver_relatorios'] ?? 0)
-];
-
-if (!$p['ver_dashboard']) {
-    echo "<div style='color: #fbbf24; padding: 20px; border: 1px solid var(--card-border); background: var(--card-bg); border-radius: 12px;'>
-            <i class='fas fa-shield-halved'></i> O seu perfil não possui autorização para visualizar este painel.
-          </div>";
-    exit;
-}
-
-// 5. PROCESSAMENTO DE DADOS (APENAS SE HOUVER PERMISSÃO ESPECÍFICA)
-
-// A. Vendas & Gráficos
-$total_vendas_hoje = 0.00; $qtd_vendas_hoje = 0; $res_feed_vendas = null; $labels_dias = []; $valores_dias = [];
-if ($p['ver_vendas']) {
-    $res_vhoje = $conn->query("SELECT COUNT(id_venda) as qtd, SUM(total_final) as total FROM vendas WHERE DATE(data_venda) = CURDATE() AND status_venda = 'Concluida'");
-    if($res_vhoje) {
-        $dv = $res_vhoje->fetch_assoc();
-        $total_vendas_hoje = $dv['total'] ?? 0.00;
-        $qtd_vendas_hoje = $dv['qtd'] ?? 0;
-    }
-    $res_feed_vendas = $conn->query("SELECT v.*, f.nome_completo as vendedor FROM vendas v LEFT JOIN funcionarios f ON v.id_usuario = f.id_sistema ORDER BY v.id_venda DESC LIMIT 5");
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>VisionPharma | Centro de Comando</title>
     
-    $res_grafico = $conn->query("SELECT DATE(data_venda) as dia, SUM(total_final) as total FROM vendas WHERE data_venda >= DATE_SUB(CURDATE(), INTERVAL 7 DAY) AND status_venda = 'Concluida' GROUP BY DATE(data_venda) ORDER BY DATE(data_venda) ASC");
-    if($res_grafico){
-        while($g = $res_grafico->fetch_assoc()){
-            $labels_dias[] = date('d/m', strtotime($g['dia']));
-            $valores_dias[] = (float)$g['total'];
-        }
-    }
-}
-
-// B. Logística & Estoque Crítico
-$res_estoque_critico = null; $res_validade_critica = null;
-if ($p['ver_estoque']) {
-    $res_estoque_critico = $conn->query("SELECT nome_produto, estoque_atual_caixas FROM produtos WHERE estoque_atual_caixas <= 10 AND status_item = 'Ativo' ORDER BY estoque_atual_caixas ASC LIMIT 4");
-    $res_validade_critica = $conn->query("SELECT nome_produto, data_validade FROM produtos WHERE data_validade <= DATE_ADD(CURDATE(), INTERVAL 60 DAY) AND data_validade >= CURDATE() AND status_item = 'Ativo' ORDER BY data_validade ASC LIMIT 4");
-}
-
-// C. Finanças
-$contas_vencem_hoje = 0; $valor_debitos_hoje = 0.00;
-if ($p['ver_financeiro']) {
-    $res_financeiro_hoje = $conn->query("SELECT COUNT(id_conta) as qtd, SUM(valor_original) as total FROM financeiro_contas_pagar WHERE data_vencimento = CURDATE() AND status_conta IN ('PENDENTE', 'PAGO_PARCIAL')");
-    if($res_financeiro_hoje) {
-        $df = $res_financeiro_hoje->fetch_assoc();
-        $contas_vencem_hoje = $df['qtd'] ?? 0;
-        $valor_debitos_hoje = $df['total'] ?? 0.00;
-    }
-}
-
-// D. Auditoria
-$res_logs_auditoria = null;
-if ($p['ver_logs']) {
-    $res_logs_auditoria = $conn->query("SELECT acao, detalhes, data_registo FROM auditoria_logs ORDER BY id_log DESC LIMIT 4");
-}
-?>
+    <link rel="stylesheet" href="assets/fontawesome/css/all.min.css">
+	<link rel="stylesheet" href="/pharmora/global.css">
 
 <style>
-.vision-dash-container {
-    width: 100%;
-    animation: fadeInDash 0.35s ease-out;
-}
+    :root {
+        --bg-color: #020202;
+        --card-bg: rgba(255, 255, 255, 0.03);
+        --card-border: rgba(255, 255, 255, 0.08);
+        --text-main: #ffffff;
+        --text-dim: #888888;
+        --accent: #00ffcc;
+        --danger: #ff4444;
+        --input-fill: rgba(255, 255, 255, 0.05);
+        --logo-filter: invert(1) brightness(1.8);
+        --sidebar-width: 260px;
+    }
 
-/* Painel de Atalhos Operacionais */
-.shortcuts-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-    gap: 16px;
-    margin-bottom: 24px;
-}
-.shortcut-card {
-    background: var(--card-bg);
-    border: 1px solid var(--card-border);
-    border-radius: 14px;
-    padding: 18px 14px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 12px;
-    cursor: pointer;
-    text-decoration: none;
-    color: var(--text-main);
-    transition: all 0.2s ease;
-    text-align: center;
-}
-.shortcut-card i { font-size: 24px; }
-.shortcut-card span { font-size: 13px; font-weight: 600; }
-.shortcut-card:hover {
-    border-color: var(--accent);
-    background: var(--input-fill);
-    transform: translateY(-2px);
-}
+    [data-theme="light"] {
+        --bg-color: #f0f0f2;
+        --card-bg: rgba(255, 255, 255, 0.7);
+        --card-border: rgba(0, 0, 0, 0.06);
+        --text-main: #000000;
+        --text-dim: #666666;
+        --accent: #008f72;
+        --input-fill: rgba(0, 0, 0, 0.04);
+        --logo-filter: none;
+    }
 
-/* Grids e Blocos do Painel */
-.dash-row-major {
-    display: grid;
-    grid-template-columns: 2fr 1fr;
-    gap: 20px;
-    margin-bottom: 20px;
-}
-.dash-row-minor {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 20px;
-}
+    * { margin: 0; padding: 0; box-sizing: border-box; font-family: "Inter", sans-serif; }
 
-.dash-panel-box {
-    background: var(--card-bg);
-    border: 1px solid var(--card-border);
-    border-radius: 16px;
-    padding: 20px;
-    box-sizing: border-box;
-}
-.panel-box-title {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 15px;
-}
-.panel-box-title h3 { 
-    margin: 0; font-size: 13px; font-weight: 700; text-transform: uppercase; 
-    color: var(--text-dim); display: flex; align-items: center; gap: 8px; letter-spacing: 0.5px;
-}
+    body {
+        background-color: var(--bg-color); color: var(--text-main);
+        height: 100vh; display: flex; overflow: hidden;
+        transition: background 0.4s ease;
+    }
 
-/* Listas internas de Registros */
-.feed-row-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 10px 8px;
-    border-bottom: 1px solid var(--card-border);
-    font-size: 12.5px;
-}
-.feed-row-item:last-child { border-bottom: none; }
+    /* TEXTURA CINEMATOGRÁFICA */
+    body::before {
+        content: ""; position: fixed; inset: 0; z-index: 0;
+        background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+        opacity: 0.03; pointer-events: none;
+    }
 
-.status-badge-ui {
-    font-size: 9px; font-weight: 700; text-transform: uppercase;
-    padding: 3px 8px; border-radius: 20px;
-}
-.soft-success { background: rgba(16, 185, 129, 0.1); color: #10b981; }
-.soft-danger { background: rgba(244, 63, 94, 0.1); color: #f43f5e; }
-.soft-warning { background: rgba(251, 191, 36, 0.1); color: #fbbf24; }
+    /* SIDEBAR (MENU LATERAL) */
+    .sidebar {
+        width: var(--sidebar-width); height: 100%;
+        background: var(--card-bg); border-right: 1px solid var(--card-border);
+        backdrop-filter: blur(20px); z-index: 50;
+        display: flex; flex-direction: column; transition: 0.4s ease;
+        flex-shrink: 0; /* Impede que a tela esprema o menu */
+    }
 
-.pulse-indicator {
-    font-size: 11px; background: rgba(0, 255, 204, 0.08); color: var(--accent);
-    padding: 4px 10px; border-radius: 20px; font-weight: 700; display: flex; align-items: center; gap: 6px;
-}
-.pulse-indicator::before { content: ''; width: 6px; height: 6px; background: var(--accent); border-radius: 50%; display: inline-block; animation: pulseAni 1.5s infinite; }
+    .sidebar.collapsed { width: 80px; }
+    
+    .brand-area {
+        height: 80px; display: flex; align-items: center; justify-content: center;
+        border-bottom: 1px solid var(--card-border);
+    }
+    .brand-logo { width: 140px; filter: var(--logo-filter); transition: 0.3s; }
+    .sidebar.collapsed .brand-logo { width: 40px; }
 
-@keyframes pulseAni { 0%, 100% { transform: scale(0.9); opacity: 0.4; } 50% { transform: scale(1.3); opacity: 1; } }
-@keyframes fadeInDash { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+    .menu-wrapper { flex: 1; overflow-y: auto; padding: 20px 0; }
+    .menu-wrapper::-webkit-scrollbar { width: 4px; }
+    .menu-wrapper::-webkit-scrollbar-thumb { background: var(--card-border); }
 
-@media (max-width: 992px) {
-    .dash-row-major, .dash-row-minor { grid-template-columns: 1fr; }
-}
+    .menu-category {
+        font-size: 10px; color: var(--text-dim); text-transform: uppercase;
+        letter-spacing: 2px; margin: 15px 25px 10px; font-weight: 700;
+    }
+    .sidebar.collapsed .menu-category { display: none; }
+
+    .menu-item {
+        display: flex; align-items: center; padding: 14px 25px;
+        color: var(--text-main); text-decoration: none; font-size: 14px;
+        border-left: 3px solid transparent; transition: 0.3s; cursor: pointer;
+    }
+    .menu-item i { width: 25px; font-size: 18px; color: var(--text-dim); transition: 0.3s; }
+    .menu-item span { margin-left: 10px; white-space: nowrap; transition: opacity 0.3s; }
+    .sidebar.collapsed .menu-item span { opacity: 0; pointer-events: none; }
+
+    .menu-item:hover, .menu-item.active { background: var(--input-fill); border-left-color: var(--accent); }
+    .menu-item:hover i, .menu-item.active i { color: var(--accent); }
+
+    /* ÁREA PRINCIPAL (MAIN STAGE) - AQUI ESTÁ A MÁGICA */
+    .main-content {
+        flex: 1; 
+        display: flex; 
+        flex-direction: column; 
+        position: relative; 
+        z-index: 10;
+        min-width: 0; /* CRÍTICO: Impede que tabelas internas criem barra de rolagem horizontal na tela inteira */
+        transform: translateZ(0); /* CRÍTICO: Prende os modais com position:fixed DENTRO desta área. Nunca mais vaza para o sidebar! */
+    }
+
+    /* TOPBAR */
+    .topbar {
+        height: 80px; display: flex; justify-content: space-between; align-items: center;
+        padding: 0 30px; background: var(--card-bg); border-bottom: 1px solid var(--card-border);
+        backdrop-filter: blur(10px); flex-shrink: 0;
+    }
+
+    .top-left { display: flex; align-items: center; gap: 20px; }
+    .toggle-btn { background: none; border: none; color: var(--text-main); font-size: 20px; cursor: pointer; }
+    .page-title { font-size: 18px; font-weight: 600; letter-spacing: 1px; }
+    .top-right { display: flex; align-items: center; gap: 25px; }
+
+    /* NOTIFICAÇÕES */
+    .notification-bell { position: relative; cursor: pointer; font-size: 20px; color: var(--text-dim); transition: 0.3s; }
+    .notification-bell:hover { color: var(--text-main); }
+    .badge {
+        position: absolute; top: -5px; right: -8px; background: var(--danger);
+        color: white; font-size: 9px; font-weight: bold; width: 16px; height: 16px;
+        border-radius: 50%; display: flex; align-items: center; justify-content: center;
+        border: 2px solid var(--bg-color);
+    }
+
+    /* PERFIL DO USUÁRIO */
+    .user-profile { display: flex; align-items: center; gap: 15px; cursor: pointer; padding: 5px 10px; border-radius: 12px; transition: 0.3s; }
+    .user-profile:hover { background: var(--input-fill); }
+    .user-info { text-align: right; }
+    .user-name { font-size: 13px; font-weight: 700; color: var(--text-main); }
+    .user-role { font-size: 11px; color: var(--accent); letter-spacing: 1px; text-transform: uppercase; }
+    .user-avatar { width: 40px; height: 40px; border-radius: 10px; object-fit: cover; border: 1px solid var(--card-border); }
+
+    /* VIEWPORT (ONDE AS TELAS ABREM) */
+    .viewport {
+        flex: 1; padding: 30px; overflow-y: auto; overflow-x: hidden; position: relative; min-width: 0;
+    }
+
+    /* RODAPÉ DO SISTEMA */
+    footer {
+        padding: 15px; text-align: center; border-top: 1px solid var(--card-border);
+        background: var(--card-bg); z-index: 10; flex-shrink: 0;
+    }
+    .footer-line { font-size: 9px; letter-spacing: 2px; color: var(--text-dim); line-height: 1.8; font-weight: 500; }
+    .footer-line b { color: var(--text-main); opacity: 0.8; }
+
+    /* Loader */
+    .loader { width: 40px; height: 40px; border: 3px solid var(--card-border); border-top-color: var(--accent); border-radius: 50%; animation: spin 1s linear infinite; margin: 100px auto; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* RESPONSIVIDADE EXTREMA DO DASHBOARD */
+    @media (max-width: 768px) {
+        .topbar { padding: 0 15px; }
+        .viewport { padding: 15px; }
+        .page-title { display: none; } /* Oculta título longo em celulares pequenos */
+        .user-info { display: none; } /* Oculta nome/cargo, deixa só o avatar */
+    }
 </style>
+</head>
+<body data-theme="dark">
 
-<div class="vision-dash-container">
-
-    <div class="shortcuts-grid">
-        <?php if ($p['ver_vendas']): ?>
-            <a href="#" onclick="loadModule('vendas', 'Terminal de Vendas')" class="shortcut-card">
-                <i class="fas fa-shopping-cart" style="color: #10b981;"></i>
-                <span>Abrir Balcão PDV</span>
-            </a>
-        <?php endif; ?>
-
-        <?php if ($p['ver_estoque']): ?>
-            <a href="#" onclick="loadModule('estoque', 'Controle de Estoque')" class="shortcut-card">
-                <i class="fas fa-boxes" style="color: #3b82f6;"></i>
-                <span>Aceder Estoque</span>
-            </a>
-        <?php endif; ?>
-
-        <?php if ($p['ver_financeiro']): ?>
-            <a href="#" onclick="loadModule('financeiro', 'Gestão Financeira')" class="shortcut-card">
-                <i class="fas fa-wallet" style="color: #fbbf24;"></i>
-                <span>Fluxo Financeiro</span>
-            </a>
-        <?php endif; ?>
-
-        <?php if ($p['ver_perdas']): ?>
-            <a href="#" onclick="loadModule('perdas', 'Gestão de Perdas')" class="shortcut-card">
-                <i class="fas fa-trash-alt" style="color: #f43f5e;"></i>
-                <span>Lançar Perdas</span>
-            </a>
-        <?php endif; ?>
-
-        <?php if ($p['gerir_usuarios']): ?>
-            <a href="#" onclick="loadModule('funcionarios', 'Funcionários & Acessos')" class="shortcut-card">
-                <i class="fas fa-users-cog" style="color: #a5b4fc;"></i>
-                <span>Utilizadores</span>
-            </a>
-        <?php endif; ?>
-    </div>
-
-    <?php if ($p['ver_vendas']): ?>
-    <div class="dash-row-major">
-        <div class="dash-panel-box">
-            <div class="panel-box-title">
-                <h3><i class="fas fa-chart-line" style="color: var(--accent);"></i> Desempenho de Faturação Diária</h3>
-                <div class="pulse-indicator">Monitor Ativo</div>
-            </div>
-            <div style="height: 240px; width: 100%;">
-                <canvas id="ctxVisionFaturacao"></canvas>
-            </div>
+    <nav class="sidebar" id="sidebar">
+        <div class="brand-area">
+            <h2 id="logo-text" style="letter-spacing: 2px;">VISION<span style="color:var(--accent)">PHARMA</span></h2>
         </div>
+        <div class="menu-wrapper" id="menu-container"></div>
+    </nav>
 
-        <div class="dash-panel-box">
-            <div class="panel-box-title">
-                <h3><i class="fas fa-receipt" style="color: #10b981;"></i> Últimas Vendas</h3>
-                <span style="font-size: 11px; font-weight: 700; color: #10b981;"><?php echo $qtd_vendas_hoje; ?> Hoje</span>
+    <main class="main-content">
+        <header class="topbar">
+            <div class="top-left">
+                <button class="toggle-btn" onclick="toggleSidebar()"><i class="fas fa-bars"></i></button>
+                <h1 class="page-title" id="active-page-title">Dashboard Inicial</h1>
             </div>
-            <div style="max-height: 240px; overflow-y: auto; padding-right: 4px;">
-                <?php if ($res_feed_vendas && $res_feed_vendas->num_rows > 0): ?>
-                    <?php while($v = $res_feed_vendas->fetch_assoc()): ?>
-                        <div class="feed-row-item">
-                            <div>
-                                <strong style="color: var(--text-main);">#<?php echo $v['id_venda']; ?> - <?php echo htmlspecialchars($v['nome_cliente'] ?: 'Consumidor Final'); ?></strong><br>
-                                <small style="color: var(--text-dim); font-size:11px;"><?php echo date('H:i', strtotime($v['data_venda'])); ?> • Op: <?php echo htmlspecialchars($v['vendedor'] ?: 'PDV'); ?></small>
-                            </div>
-                            <div style="text-align: right;">
-                                <span style="color: #10b981; font-weight: 700;"><?php echo number_format($v['total_final'], 2, ',', '.'); ?> Kz</span><br>
-                                <span class="status-badge-ui soft-success" style="font-size:9px;"><?php echo $v['forma_pagamento']; ?></span>
-                            </div>
-                        </div>
-                    <?php endwhile; ?>
-                <?php else: ?>
-                    <div style="text-align: center; color: var(--text-dim); padding: 50px 0; font-size: 13px;">Sem movimentações de balcão registadas hoje.</div>
-                <?php endif; ?>
-            </div>
-        </div>
-    </div>
-    <?php endif; ?>
 
-    <div class="dash-row-minor">
-        
-        <?php if ($p['ver_estoque']): ?>
-        <div class="dash-panel-box">
-            <div class="panel-box-title">
-                <h3><i class="fas fa-boxes-stacked" style="color: #f43f5e;"></i> Alertas de Logística</h3>
-            </div>
-            
-            <div style="display: flex; flex-direction: column; gap: 15px;">
-                <div>
-                    <small style="color: #f43f5e; font-weight: 800; font-size: 11px; text-transform: uppercase; display: block; margin-bottom: 6px;">Ruptura Crítica (≤ 10 caixas)</small>
-                    <?php if ($res_estoque_critico && $res_estoque_critico->num_rows > 0): ?>
-                        <?php while($e = $res_estoque_critico->fetch_assoc()): ?>
-                            <div class="feed-row-item" style="background: rgba(244,63,94,0.02); padding: 8px 10px; border-radius: 8px; border: 1px solid var(--card-border); margin-bottom: 5px;">
-                                <span><?php echo htmlspecialchars($e['nome_produto']); ?></span>
-                                <strong style="color: #f43f5e;"><?php echo $e['estoque_atual_caixas']; ?> un</strong>
-                            </div>
-                        <?php endwhile; ?>
-                    <?php else: ?>
-                        <div style="font-size:12px; color:var(--text-dim); padding: 2px 0;"><i class="fas fa-check-circle" style="color:#10b981;"></i> Níveis de estoque regularizados.</div>
-                    <?php endif; ?>
-                </div>
-
-                <div>
-                    <small style="color: #fbbf24; font-weight: 800; font-size: 11px; text-transform: uppercase; display: block; margin-bottom: 6px;">Validades Próximas (Janela 60 Dias)</small>
-                    <?php if ($res_validade_critica && $res_validade_critica->num_rows > 0): ?>
-                        <?php while($val = $res_validade_critica->fetch_assoc()): 
-                            $dias = (int)date_diff(date_create(date('Y-m-d')), date_create($val['data_validade']))->format('%r%a');
-                        ?>
-                            <div class="feed-row-item" style="background: rgba(251,191,36,0.02); padding: 8px 10px; border-radius: 8px; border: 1px solid var(--card-border); margin-bottom: 5px;">
-                                <span><?php echo htmlspecialchars($val['nome_produto']); ?></span>
-                                <span style="color: #fbbf24; font-weight: 700;"><?php echo $dias; ?> dias rest.</span>
-                            </div>
-                        <?php endwhile; ?>
-                    <?php else: ?>
-                        <div style="font-size:12px; color:var(--text-dim); padding: 2px 0;"><i class="fas fa-shield-halved" style="color:#3b82f6;"></i> Nenhum lote sob risco imediato.</div>
-                    <?php endif; ?>
-                </div>
-            </div>
-        </div>
-        <?php endif; ?>
-
-        <div class="dash-panel-box" style="display: flex; flex-direction: column; justify-content: space-between; gap: 20px;">
-            
-            <?php if ($p['ver_financeiro']): ?>
-            <div>
-                <div class="panel-box-title" style="margin-bottom: 10px;">
-                    <h3><i class="fas fa-clock-history" style="color: #fbbf24;"></i> Obrigações de Débito (Hoje)</h3>
-                </div>
-                <div style="display: flex; gap: 15px; background: rgba(255,255,255,0.01); border: 1px solid var(--card-border); padding: 12px; border-radius: 12px;">
-                    <div style="flex:1; text-align: center; border-right: 1px solid var(--card-border);">
-                        <small style="color: var(--text-dim); font-size:11px;">Contas a Pagar</small>
-                        <h4 style="margin: 5px 0 0 0; font-size: 18px; color: #fbbf24;"><?php echo $contas_vencem_hoje; ?></h4>
+            <div class="top-right" style="display:flex; align-items:center; gap:20px;">
+                <button onclick="toggleTheme()" style="background:none; border:none; color:var(--text-dim); cursor:pointer;"><i class="fas fa-moon" id="theme-icon"></i></button>
+                
+                <div class="user-profile">
+                    <div class="user-info">
+                        <div class="user-name" id="ui-username">Carregando...</div>
+                        <div class="user-role" id="ui-userrole">...</div>
                     </div>
-                    <div style="flex:1.2; text-align: center;">
-                        <small style="color: var(--text-dim); font-size:11px;">Montante Total</small>
-                        <h4 style="margin: 5px 0 0 0; font-size: 16px; color: #f43f5e;"><?php echo number_format($valor_debitos_hoje, 2, ',', '.'); ?> Kz</h4>
-                    </div>
+                    <img src="assets/imagem/default.jpg" alt="Avatar" class="user-avatar" id="ui-avatar">
                 </div>
             </div>
-            <?php endif; ?>
+        </header>
 
-            <?php if ($p['ver_logs']): ?>
-            <div style="flex-grow: 1;">
-                <div class="panel-box-title" style="margin-bottom: 10px;">
-                    <h3><i class="fas fa-fingerprint" style="color: #a5b4fc;"></i> Atividades do Sistema</h3>
-                </div>
-                <div style="display: flex; flex-direction: column; gap: 6px;">
-                    <?php if ($res_logs_auditoria && $res_logs_auditoria->num_rows > 0): ?>
-                        <?php while($log = $res_logs_auditoria->fetch_assoc()): ?>
-                            <div style="font-size: 11.5px; padding: 6px 8px; background: rgba(255,255,255,0.01); border-radius: 6px; border-left: 3px solid #a5b4fc;">
-                                <span style="color: var(--text-main); font-weight: 700; font-size:10px; text-transform:uppercase;"><?php echo htmlspecialchars($log['acao']); ?></span> - 
-                                <span style="color: var(--text-dim);"><?php echo htmlspecialchars(mb_strimwidth($log['detalhes'], 0, 48, "...")); ?></span>
-                            </div>
-                        <?php endwhile; ?>
-                    <?php else: ?>
-                        <div style="font-size:12px; color:var(--text-dim); text-align:center; padding: 15px 0;">Sem atividades recentes registadas.</div>
-                    <?php endif; ?>
-                </div>
+        <div class="viewport" id="viewport-stage">
             </div>
-            <?php endif; ?>
 
+        <footer>
+            <div class="footer-line">VISIONPHARMA V1.0.0 • © 2026</div>
+        </footer>
+		<!-- Modal de Confirmação Global -->
+<div id="modal-confirm" class="modal-confirm-overlay" style="display: none;">
+    <div class="modal-confirm-box">
+        <div class="modal-confirm-icon">
+            <i class="fas fa-exclamation-triangle"></i>
+        </div>
+        <h3 id="confirm-title">Confirmar Ação</h3>
+        <p id="confirm-msg">Você tem certeza que deseja prosseguir com esta operação?</p>
+        <div class="modal-confirm-buttons">
+            <button class="btn-confirm-cancel" onclick="closeConfirmModal()">Cancelar</button>
+            <button id="btn-confirm-execute" class="btn-confirm-action">Confirmar</button>
         </div>
     </div>
-
 </div>
+    </main>
 
-<?php if ($p['ver_vendas']): ?>
-<script>
-(function() {
-    // Função interna que monta o gráfico quando tudo estiver pronto
-    function inicializarVisionGrafico() {
-        const canvas = document.getElementById('ctxVisionFaturacao');
-        if (!canvas) return;
+    <script>
+    // 1. INJEÇÃO DE DADOS DO SERVIDOR (PHP -> JS)
+    // Aqui pegamos o que está na sua $_SESSION do XAMPP
+    const permissoesServidor = <?php echo json_encode($_SESSION['permissoes']); ?>;
+    const nomeUsuario = "<?php echo $_SESSION['usuario_nome']; ?>";
+    const cargoUsuario = "<?php echo $_SESSION['usuario_cargo']; ?>";
+    const fotoUsuario = "<?php echo $_SESSION['usuario_foto'] ?? 'assets/imagem/default.jpg'; ?>";
 
-        try {
-            // CORREÇÃO CRÍTICA: Se o utilizador alternar de menu e voltar, destrói o gráfico antigo antes de recriar
-            const graficoExistente = Chart.getChart(canvas);
-            if (graficoExistente) {
-                graficoExistente.destroy();
-            }
-        } catch(e) { console.log(e); }
+    const systemMenu = [
+    { type: 'category', title: 'Operacional' },
+    { id: 'dashboard', icon: 'fa-chart-pie', text: 'Painel Principal', perm: 'ver_dashboard' },
+    { id: 'vendas', icon: 'fa-shopping-cart', text: 'Terminal de Vendas', perm: 'ver_vendas' },
+    // CORREÇÃO: Agora usa a permissão específica ver_perdas
+    { id: 'perdas', icon: 'fa-trash-alt', text: 'Gestão de Perdas', perm: 'ver_perdas' },
+    
+    { type: 'category', title: 'Inventário' },
+    { id: 'estoque', icon: 'fa-boxes', text: 'Controle de Estoque', perm: 'ver_estoque' },
+    // CORREÇÃO: Agora usa a permissão específica ver_fornecedores
+    { id: 'fornecedores', icon: 'fa-truck-loading', text: 'Fornecedores', perm: 'ver_fornecedores' },
+    
+    { type: 'category', title: 'Administração' },
+    { id: 'funcionarios', icon: 'fa-users-cog', text: 'Funcionários & Acessos', perm: 'gerir_usuarios' },
+    { id: 'financeiro', icon: 'fa-wallet', text: 'Gestão Financeira', perm: 'ver_financeiro' },
+    
+    { type: 'category', title: 'Inteligência' },
+    { id: 'relatorios', icon: 'fa-file-invoice-dollar', text: 'Relatórios Gerais', perm: 'ver_relatorios' },
+    { id: 'auditoria', icon: 'fa-fingerprint', text: 'Logs de Auditoria', perm: 'ver_logs' },
+    
+    { type: 'category', title: 'Sistema' },
+    { id: 'definicoes', icon: 'fa-sliders-h', text: 'Definições', perm: 'ver_dashboard' },
+    { id: 'logout', icon: 'fa-sign-out-alt', text: 'Terminar Sessão', perm: 'ver_dashboard', isAction: true }
+];
 
-        // Renderização oficial com os dados vindos do PHP
-        new Chart(canvas.getContext('2d'), {
-            type: 'line',
-            data: {
-                labels: <?php echo json_encode($labels_dias); ?>,
-                datasets: [{
-                    label: 'Faturação (Kz)',
-                    data: <?php echo json_encode($valores_dias); ?>,
-                    borderColor: '#00ffcc',
-                    backgroundColor: 'rgba(0, 255, 204, 0.03)',
-                    borderWidth: 2.5,
-                    pointBackgroundColor: '#00ffcc',
-                    pointHoverRadius: 6,
-                    tension: 0.35,
-                    fill: true
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: { legend: { display: false } },
-                scales: {
-                    x: {
-                        grid: { color: 'rgba(255, 255, 255, 0.02)', borderDash: [3, 3] },
-                        ticks: { color: '#888888', font: { size: 10, family: 'Inter' } }
-                    },
-                    y: {
-                        grid: { color: 'rgba(255, 255, 255, 0.02)', borderDash: [3, 3] },
-                        ticks: { color: '#888888', font: { size: 10, family: 'Inter' } }
-                    }
+    function initDashboard() {
+        // Preenche a interface com dados do servidor
+        document.getElementById('ui-username').textContent = nomeUsuario;
+        document.getElementById('ui-userrole').textContent = cargoUsuario;
+        document.getElementById('ui-avatar').src = fotoUsuario;
+
+        // Monta o menu baseado nas permissões reais do banco
+        buildMenu(permissoesServidor);
+        loadModule('dashboard', 'Painel Principal'); 
+    }
+
+    function buildMenu(userPerms) {
+        const container = document.getElementById('menu-container');
+        if (!container) return;
+        container.innerHTML = '';
+
+        systemMenu.forEach(item => {
+            if (item.type === 'category') {
+                const cat = document.createElement('div');
+                cat.className = 'menu-category';
+                cat.textContent = item.title;
+                container.appendChild(cat);
+            } else {
+                // Checa se a permissão existe no array e se é verdadeira (1 ou true)
+                const temAcesso = userPerms && (userPerms[item.perm] == 1 || userPerms[item.perm] === true);
+                
+                if (temAcesso) {
+                    const link = document.createElement('a');
+                    link.className = 'menu-item';
+                    link.id = `menu-${item.id}`;
+                    link.innerHTML = `<i class="fas ${item.icon}"></i><span>${item.text}</span>`;
+                    link.onclick = () => item.isAction ? handleLogout() : loadModule(item.id, item.text);
+                    container.appendChild(link);
                 }
             }
         });
     }
 
-    // CORREÇÃO DO LOADER: Injeta a biblioteca dinamicamente via JS puro se ela não existir no escopo global
-    if (typeof Chart === 'undefined') {
-        const scriptCDN = document.createElement('script');
-        scriptCDN.src = "https://cdn.jsdelivr.net/npm/chart.js";
-        scriptCDN.onload = function() {
-            // Aguarda 60ms para garantir que o DOM injetado pelo Fetch esteja mapeado
-            setTimeout(inicializarVisionGrafico, 60);
-        };
-        document.head.appendChild(scriptCDN);
-    } else {
-        // Se a biblioteca já existir, apenas executa limpando o cache do canvas anterior
-        setTimeout(inicializarVisionGrafico, 60);
+    async function loadModule(moduleId, title) {
+        const viewport = document.getElementById('viewport-stage');
+        const titleEl = document.getElementById('active-page-title');
+        
+        document.querySelectorAll('.menu-item').forEach(el => el.classList.remove('active'));
+        const activeMenu = document.getElementById(`menu-${moduleId}`);
+        if(activeMenu) activeMenu.classList.add('active');
+
+        titleEl.textContent = title;
+        viewport.innerHTML = '<div class="loader"></div>';
+
+        try {
+            const response = await fetch(`modules/${moduleId}.php`);
+            if (!response.ok) throw new Error();
+            const html = await response.text();
+            viewport.innerHTML = html;
+
+            const scripts = viewport.querySelectorAll("script");
+            scripts.forEach(oldScript => {
+                const newScript = document.createElement("script");
+                newScript.text = oldScript.text;
+                document.body.appendChild(newScript).parentNode.removeChild(newScript);
+            });
+        } catch (err) {
+            viewport.innerHTML = `<div style="text-align:center; padding:50px;">
+                <i class="fas fa-exclamation-triangle" style="font-size:40px; color:var(--danger)"></i>
+                <p style="margin-top:20px;">O módulo <b>${moduleId}.php</b> não foi encontrado.</p>
+            </div>`;
+        }
     }
-})();
+
+    function toggleSidebar() { document.getElementById('sidebar').classList.toggle('collapsed'); }
+
+    function toggleTheme() {
+        const isDark = document.body.getAttribute('data-theme') === 'dark';
+        document.body.setAttribute('data-theme', isDark ? 'light' : 'dark');
+        document.getElementById('theme-icon').className = isDark ? 'fas fa-sun' : 'fas fa-moon';
+    }
+
+    async function handleLogout() {
+        if(confirm("Deseja encerrar a sessão?")) {
+            // No XAMPP, redirecionamos para o PHP que mata a sessão
+            window.location.href = "logout.php";
+        }
+    }
+
+    window.onload = initDashboard;
 </script>
-<?php endif; ?>
+</body>
+</html>
