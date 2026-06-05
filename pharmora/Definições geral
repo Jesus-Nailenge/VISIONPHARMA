@@ -1,0 +1,224 @@
+<?php
+// Ativar exibição de erros para desenvolvimento
+ini_set('display_errors', 1);
+error_reporting(E_ALL);
+
+// Conexão com o Banco de Dados
+try {
+    $pdo = new PDO("mysql:host=localhost;dbname=pharmora_db;charset=utf8mb4", "root", "", [
+        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC
+    ]);
+} catch (Exception $e) {
+    die("Erro de conexão: " . $e->getMessage());
+}
+
+$mensagemsucesso = "";
+
+// PROCESSAMENTO DO FORMULÁRIO (SALVAMENTO VIA POST)
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    try {
+        $pdo->beginTransaction();
+        
+        $configuracoesParaSalvar = [
+            'nome_empresa'          => $_POST['nome_empresa'] ?? '',
+            'nif_empresa'           => $_POST['nif_empresa'] ?? '',
+            'telefone_empresa'      => $_POST['telefone_empresa'] ?? '',
+            'email_empresa'         => $_POST['email_empresa'] ?? '',
+            'endereco_empresa'      => $_POST['endereco_empresa'] ?? '',
+            'moeda_padrao'          => $_POST['moeda_padrao'] ?? 'Kz',
+            'iva_padrao'            => $_POST['iva_padrao'] ?? '0.00',
+            'limite_alerta_estoque' => $_POST['limite_alerta_estoque'] ?? '5'
+        ];
+
+        $sql_update = "UPDATE sistema_definicoes SET valor = :valor WHERE chave = :chave";
+        $stmt = $pdo->prepare($sql_update);
+
+        foreach ($configuracoesParaSalvar as $chave => $valor) {
+            $stmt->execute([
+                ':valor' => htmlspecialchars(trim($valor)),
+                ':chave' => $chave
+            ]);
+        }
+
+        $pdo->commit();
+        $mensagemsucesso = "Configurações atualizadas com sucesso!";
+    } catch (Exception $e) {
+        $pdo->rollBack();
+        $mensagemerro = "Erro ao salvar alterações: " . $e->getMessage();
+    }
+}
+
+// BUSCA AS CONFIGURAÇÕES ATUAIS PARA PREENCHER O FORMULÁRIO
+$stmt = $pdo->query("SELECT chave, valor FROM sistema_definicoes");
+$configs = [];
+while ($row = $stmt->fetch()) {
+    $configs[$row['chave']] = $row['valor'];
+}
+?>
+<!DOCTYPE html>
+<html lang="pt-PT">
+<head>
+    <meta charset="UTF-8">
+    <title>Definições - VisionPharma</title>
+    <style>
+        :root {
+            --bg-principal: #0a0a0a;
+            --bg-card: #121212;
+            --bg-sidebar: #0f0f0f;
+            --texto-claro: #ffffff;
+            --texto-mutado: #888888;
+            --verde-neon: #00e676;
+            --linha-divisoria: #222222;
+            --input-bg: #1a1a1a;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { background-color: var(--bg-principal); color: var(--texto-claro); display: flex; min-height: 100vh; overflow-x: hidden; }
+
+        /* LAYOUT E ESTRUTURA */
+        .sidebar { width: 260px; background-color: var(--bg-sidebar); border-right: 1px solid var(--linha-divisoria); padding: 20px 0; display: flex; flex-direction: column; }
+        .main-container { flex: 1; display: flex; flex-direction: column; }
+        
+        /* SIDEBAR COMPONENTES */
+        .logo-area { text-align: center; padding-bottom: 20px; border-bottom: 1px solid var(--linha-divisoria); }
+        .logo-placeholder { font-weight: bold; font-size: 1.2rem; letter-spacing: 2px; color: var(--texto-claro); }
+        
+        .menu-grupo { padding: 15px 20px 5px 20px; font-size: 0.75rem; color: var(--texto-mutado); text-transform: uppercase; letter-spacing: 1px; }
+        .menu-item { display: flex; align-items: center; padding: 12px 25px; color: var(--texto-claro); text-decoration: none; font-size: 0.9rem; transition: 0.2s; }
+        .menu-item:hover, .menu-item.active { background-color: var(--bg-card); color: var(--verde-neon); border-left: 3px solid var(--verde-neon); }
+        
+        /* TOPO DO SISTEMA */
+        .topbar { height: 70px; border-bottom: 1px solid var(--linha-divisoria); display: flex; align-items: center; justify-content: space-between; padding: 0 30px; background-color: var(--bg-principal); }
+        .topbar-titulo { font-size: 1.3rem; font-weight: 600; }
+        .topbar-user { display: flex; align-items: center; gap: 15px; }
+        .user-info { text-align: right; font-size: 0.85rem; }
+        .user-role { color: var(--verde-neon); font-size: 0.75rem; font-weight: bold; }
+        .avatar-box { width: 35px; height: 35px; border-radius: 5px; background: var(--linha-divisoria); display:flex; align-items:center; justify-content:center; }
+
+        /* PAINEL DE CONTEÚDO / FORMULÁRIO */
+        .conteudo-principal { padding: 40px; flex: 1; max-width: 1000px; width: 100%; margin: 0 auto; }
+        .card-definicoes { background-color: var(--bg-card); border: 1px solid var(--linha-divisoria); border-radius: 8px; padding: 30px; }
+        
+        .form-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; margin-bottom: 25px; }
+        .form-grupo { display: flex; flex-direction: column; gap: 8px; }
+        .form-grupo.full-width { grid-column: span 2; }
+        
+        label { font-size: 0.85rem; color: var(--texto-mutado); text-transform: uppercase; }
+        input, text-area, select { background-color: var(--input-bg); border: 1px solid var(--linha-divisoria); color: var(--texto-claro); padding: 12px; border-radius: 5px; font-size: 0.95rem; transition: 0.3s; }
+        input:focus, select:focus { border-color: var(--verde-neon); outline: none; }
+        
+        .btn-salvar { background-color: var(--verde-neon); color: #000; border: none; padding: 12px 30px; border-radius: 5px; font-weight: bold; cursor: pointer; font-size: 0.95rem; width: fit-content; align-self: flex-end; transition: 0.2s; }
+        .btn-salvar:hover { opacity: 0.9; transform: translateY(-1px); }
+
+        .alerta-sucesso { background-color: rgba(0, 230, 118, 0.1); border: 1px solid var(--verde-neon); color: var(--verde-neon); padding: 15px; border-radius: 5px; margin-bottom: 20px; font-size: 0.9rem; }
+
+        /* FOOTER */
+        .footer-sistema { text-align: center; padding: 20px; font-size: 0.75rem; color: var(--texto-mutado); border-top: 1px solid var(--linha-divisoria); letter-spacing: 0.5px; line-height: 1.5; }
+    </style>
+</head>
+<body>
+
+    <div class="sidebar">
+        <div class="logo-area">
+            <div class="logo-placeholder">[+] VISIONPHARMA</div>
+        </div>
+        
+        <a href="painel.php" class="menu-item">Controle de Estoque</a>
+        <a href="fornecedores.php" class="menu-item">Fornecedores</a>
+        
+        <div class="menu-grupo">Administração</div>
+        <a href="funcionarios.php" class="menu-item">Funcionários & Acessos</a>
+        <a href="financeiro.php" class="menu-item">Gestão Financeira</a>
+        
+        <div class="menu-grupo">Inteligência</div>
+        <a href="relatorios.php" class="menu-item">Relatórios Gerais</a>
+        <a href="auditoria.php" class="menu-item">Logs de Auditoria</a>
+        
+        <div class="menu-grupo">Sistema</div>
+        <a href="definicoes.php" class="menu-item active">Definições</a>
+        <a href="logout.php" class="menu-item">Terminar Sessão</a>
+    </div>
+
+    <div class="main-container">
+        
+        <div class="topbar">
+            <div class="topbar-titulo">Definições Gerais</div>
+            <div class="topbar-user">
+                <div class="user-info">
+                    <div>Administrador</div>
+                    <div class="user-role">ADMINISTRADOR DE TI</div>
+                </div>
+                <div class="avatar-box">👁️</div>
+            </div>
+        </div>
+
+        <div class="conteudo-principal">
+            
+            <?php if(!empty($mensagemsucesso)): ?>
+                <div class="alerta-sucesso"><?= $mensagemsucesso ?></div>
+            <?php endif; ?>
+
+            <form action="definicoes.php" method="POST" class="card-definicoes">
+                <div class="form-grid">
+                    
+                    <div class="form-grupo">
+                        <label for="nome_empresa">Nome da Farmácia / Empresa</label>
+                        <input type="text" id="nome_empresa" name="nome_empresa" value="<?= $configs['nome_empresa'] ?? '' ?>" required>
+                    </div>
+
+                    <div class="form-grupo">
+                        <label for="nif_empresa">NIF Comercial</label>
+                        <input type="text" id="nif_empresa" name="nif_empresa" value="<?= $configs['nif_empresa'] ?? '' ?>" required>
+                    </div>
+
+                    <div class="form-grupo">
+                        <label for="telefone_empresa">Telefone Corporativo</label>
+                        <input type="text" id="telefone_empresa" name="telefone_empresa" value="<?= $configs['telefone_empresa'] ?? '' ?>">
+                    </div>
+
+                    <div class="form-grupo">
+                        <label for="email_empresa">E-mail do Sistema</label>
+                        <input type="email" id="email_empresa" name="email_empresa" value="<?= $configs['email_empresa'] ?? '' ?>">
+                    </div>
+
+                    <div class="form-grupo full-width">
+                        <label for="endereco_empresa">Endereço Comercial</label>
+                        <input type="text" id="endereco_empresa" name="endereco_empresa" value="<?= $configs['endereco_empresa'] ?? '' ?>">
+                    </div>
+
+                    <div class="form-grupo">
+                        <label for="moeda_padrao">Moeda Padrão</label>
+                        <select id="moeda_padrao" name="moeda_padrao">
+                            <option value="Kz" <?= ($configs['moeda_padrao'] ?? '') === 'Kz' ? 'selected' : '' ?>>Kwanza Angolano (Kz)</option>
+                            <option value="$" <?= ($configs['moeda_padrao'] ?? '') === '$' ? 'selected' : '' ?>>Dólar ($)</option>
+                            <option value="€" <?= ($configs['moeda_padrao'] ?? '') === '€' ? 'selected' : '' ?>>Euro (€)</option>
+                        </select>
+                    </div>
+
+                    <div class="form-grupo">
+                        <label for="iva_padrao">Taxa de IVA Padrão (%)</label>
+                        <input type="number" step="0.01" id="iva_padrao" name="iva_padrao" value="<?= $configs['iva_padrao'] ?? '0.00' ?>">
+                    </div>
+
+                    <div class="form-grupo">
+                        <label for="limite_alerta_estoque">Gatilho de Estoque Crítico (Caixas)</label>
+                        <input type="number" id="limite_alerta_estoque" name="limite_alerta_estoque" value="<?= $configs['limite_alerta_estoque'] ?? '5' ?>">
+                    </div>
+
+                </div>
+
+                <div style="display: flex; justify-content: flex-end;">
+                    <button type="submit" class="btn-salvar">Salvar Alterações</button>
+                </div>
+            </form>
+        </div>
+
+        <div class="footer-sistema">
+            <strong>VISIONPHARMA v1.0.0.0</strong> · BUILD BETA<br>
+            © VISIONPHARMA 2026 · TODOS OS DIREITOS RESERVADOS
+        </div>
+    </div>
+
+</body>
+</html>
