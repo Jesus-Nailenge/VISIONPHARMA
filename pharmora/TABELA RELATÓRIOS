@@ -1,0 +1,48 @@
+-- =========================================================================
+-- PHARMORA - VISÕES (VIEWS) OPTIMIZADAS PARA RELATÓRIOS E DASHBOARDS
+-- =========================================================================
+
+-- A) VIEW PARA FATURAMENTO POR MÉTODO DE PAGAMENTO
+CREATE OR REPLACE VIEW vw_dashboard_faturamento_metodos AS
+SELECT 
+    metodo_pagamento, 
+    COUNT(*) AS quantidade_vendas,
+    SUM(valor_liquido) AS total_faturado
+FROM financeiro_movimentacoes
+WHERE tipo = 'RECEITA' AND origem = 'VENDA'
+GROUP BY metodo_pagamento;
+
+-- B) VIEW PARA DIAGNÓSTICO DE CONTAS A PAGAR
+CREATE OR REPLACE VIEW vw_dashboard_resumo_contas AS
+SELECT 
+    status_conta,
+    COUNT(*) AS quantidade_contas,
+    SUM(valor_original) AS total_original,
+    SUM(valor_pago) AS total_pago,
+    SUM(CASE WHEN status_conta IN ('PENDENTE', 'VENCIDO') THEN (valor_original - valor_pago) ELSE 0.00 END) AS total_pendente
+FROM financeiro_contas_pagar
+GROUP BY status_conta;
+
+-- C) VIEW PARA RANKING E ANÁLISE DE PERDAS DE ESTOQUE
+CREATE OR REPLACE VIEW vw_dashboard_resumo_perdas AS
+SELECT 
+    p.motivo,
+    COUNT(*) AS total_ocorrencias,
+    SUM(p.quantidade) AS produtos_perdidos,
+    SUM(p.valor_prejuizo_total) AS prejuizo_financeiro
+FROM perdas p
+GROUP BY p.motivo;
+
+-- D) VIEW PARA CUSTOS COM PESSOAL (FOLHA DE PAGAMENTO)
+CREATE OR REPLACE VIEW vw_dashboard_custos_pessoal AS
+SELECT 
+    ano_referencia,
+    mes_referencia,
+    COUNT(DISTINCT id_funcionario) AS total_funcionarios,
+    SUM(salario_base) AS total_salario_base,
+    SUM(subsidios_bonus) AS total_beneficios,
+    SUM(descontos_faltas + descontos_impostos) AS total_retencoes,
+    SUM(valor_pago_liquido) AS custo_real_caixa
+FROM financeiro_pagamentos_funcionarios
+WHERE status_pagamento = 'PAGO'
+GROUP BY ano_referencia, mes_referencia;
